@@ -4,7 +4,7 @@ import httpx
 import pytest
 from fastapi import HTTPException
 
-from app.ai import interpret_question
+from app.ai import deterministic_fallback, interpret_question
 from app.security import _requests, check_rate_limit
 
 
@@ -13,9 +13,9 @@ async def test_interpret_question_valid(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test")
     content = {
         "intent": "analytics",
-        "metric": "delayed_orders",
-        "dimension": "week",
-        "time_grain": "week",
+        "metric": "demand",
+        "dimension": "category",
+        "time_grain": None,
         "filters": {
             "start_date": "2025-10-01",
             "end_date": "2025-12-30",
@@ -49,8 +49,8 @@ async def test_interpret_question_valid(monkeypatch):
             transport=httpx.MockTransport(handler), **kwargs
         ),
     )
-    plan, model = await interpret_question("Show delayed orders by week")
-    assert plan.metric == "delayed_orders"
+    plan, model = await interpret_question("Show total demand by product category")
+    assert plan.metric == "demand"
     assert model == "free-test-model"
 
 
@@ -82,3 +82,18 @@ def test_rate_limit():
     with pytest.raises(HTTPException) as error:
         check_rate_limit("test-ip")
     assert error.value.status_code == 429
+
+
+@pytest.mark.parametrize(
+    ("question", "metric", "dimension"),
+    [
+        ("Show delayed orders by week for the last 3 months", "delayed_orders", "week"),
+        ("Which carrier has the highest delay rate?", "delay_rate", "carrier"),
+        ("How many orders were delivered late last month?", "delayed_orders", None),
+    ],
+)
+def test_documented_query_fallbacks(question, metric, dimension):
+    plan = deterministic_fallback(question)
+    assert plan is not None
+    assert plan.metric == metric
+    assert plan.dimension == dimension

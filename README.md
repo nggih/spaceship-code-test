@@ -89,7 +89,7 @@ React dashboard
        computed answer + chart contract + table + explanation
 ```
 
-The AI is an interpreter, not the source of truth. It sees the schema, available filter values, and dataset date range—not the dataset rows. It returns a strict `AnalysisPlan`; the backend rejects unknown fields and computes the result with deterministic code. Raw AI-generated SQL and arbitrary ECharts options are never accepted.
+The AI is an interpreter, not the source of truth. The three documented reviewer queries use a tested deterministic parser for predictable demo behavior; other supported questions are interpreted through OpenRouter. OpenRouter sees the schema, available filter values, and dataset date range—not the dataset rows. Every path returns a strict `AnalysisPlan`; the backend rejects unknown fields and computes the result with deterministic code. Raw AI-generated SQL and arbitrary ECharts options are never accepted.
 
 The frontend maps five approved semantic chart types to locally owned ECharts builders. That keeps model output away from executable presentation configuration.
 
