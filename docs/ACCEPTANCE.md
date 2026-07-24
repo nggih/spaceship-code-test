@@ -32,7 +32,7 @@ This checklist consolidates the requirements from `Coding_assignment.md` and `lo
 - [x] Optional first-AI-request Turnstile; authenticated sessions do not require it
 - [x] Body/history limits, exact CORS, and two-layer AI throttling
 - [x] Backend tests (43 passing)
-- [x] Frontend lint, unit tests (11 passing), production build, and Playwright (12 passing)
+- [x] Frontend lint, unit tests (11 passing), production build, and Playwright (14 passing)
 - [x] Docker Compose smoke test on frontend port 3000
 - [x] Architecture, assumptions, limitations, and future improvements documented
 - [x] Public repository: https://github.com/nggih/spaceship-code-test

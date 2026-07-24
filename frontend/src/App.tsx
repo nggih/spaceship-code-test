@@ -4,6 +4,7 @@ import {
   Box,
   CheckCircle2,
   Clock3,
+  Database,
   LayoutDashboard,
   LogOut,
   PackageCheck,
@@ -16,6 +17,7 @@ import { ApiError, api } from "./lib/api";
 import type { AuthUser, DashboardData, Filters, Metadata } from "./lib/types";
 import { AIPanel } from "./components/AIPanel";
 import { ChartExplainability } from "./components/ChartExplainability";
+import { DataPanel } from "./components/DataPanel";
 import { DiagnosticPanel } from "./components/DiagnosticPanel";
 import { FilterBar } from "./components/FilterBar";
 import { ForecastPanel } from "./components/ForecastPanel";
@@ -41,10 +43,11 @@ const kpiConfig = [
   { key: "average_delivery_time", label: "Avg. delivery", icon: Clock3, format: (v: number) => `${v.toFixed(1)} days` },
 ];
 
-type Tab = "dashboard" | "ask" | "forecast";
+type Tab = "dashboard" | "data" | "ask" | "forecast";
 
 const tabs: { id: Tab; label: string; icon: typeof Box }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "data", label: "Data", icon: Database },
   { id: "ask", label: "Ask AI", icon: Sparkles },
   { id: "forecast", label: "Forecast", icon: TrendingUp },
 ];
@@ -313,6 +316,47 @@ export default function App() {
 
             <DiagnosticPanel filters={filters} />
           </>
+        )}
+
+        {tab === "data" && metadata && (
+          <section className="grid gap-5">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-[.2em] text-[#49dcb1]">
+                  Source data
+                </p>
+                <h1 className="max-w-3xl text-3xl font-semibold tracking-[-.035em] sm:text-4xl">
+                  Inspect the source dataset.
+                  <br />
+                  <span className="text-[#8ba39c]">
+                    Verify every record behind the analysis.
+                  </span>
+                </h1>
+              </div>
+              <FilterBar
+                metadata={metadata}
+                filters={filters}
+                onChange={setFilters}
+                onReset={() =>
+                  setFilters({
+                    ...emptyFilters,
+                    start_date: metadata.date_range.min,
+                    end_date: metadata.date_range.max,
+                  })
+                }
+              />
+            </div>
+            {activeFilterCount > 0 && (
+              <p className="text-xs text-[#93a49e]">
+                {activeFilterCount} operational filters active
+              </p>
+            )}
+            <DataPanel
+              rows={dashboard?.table.rows ?? []}
+              total={dashboard?.table.total ?? 0}
+              loading={loading || !dashboard}
+            />
+          </section>
         )}
 
         {tab === "ask" && (

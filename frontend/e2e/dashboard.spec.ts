@@ -54,6 +54,26 @@ test("loads the dashboard and applies an operational filter", async ({ page }) =
   await expect(page.getByTestId("kpi-order_count")).not.toContainText("400");
 });
 
+test("browses, paginates, and searches the source dataset", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("tab", { name: "Data" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: /Inspect the source dataset/i }),
+  ).toBeVisible();
+  await expect(page.getByText("400 filtered records")).toBeVisible();
+  await expect(page.getByText("Showing 1–25 of 400 rows")).toBeVisible();
+
+  await page.getByRole("button", { name: "Next data page" }).click();
+  await expect(page.getByText("Page 2 of 16")).toBeVisible();
+
+  await page.getByLabel("Search source data").fill("ORD-2026-267300-0001");
+  await expect(page.getByText("Showing 1–1 of 1 rows")).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "ORD-2026-267300-0001" }),
+  ).toBeVisible();
+});
+
 test("runs diagnostics and exposes the calculation", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Analyze delay drivers" }).click();

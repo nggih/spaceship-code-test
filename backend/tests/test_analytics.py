@@ -270,6 +270,27 @@ def test_dashboard_payload_endpoint():
     assert set(payload["charts"]) == {"volume", "status", "carriers"}
     assert payload["charts"]["volume"]["query_plan"]
     assert payload["charts"]["carriers"]["explainability"]
+    assert payload["table"]["total"] == 400
+    assert len(payload["table"]["rows"]) == 400
+    assert set(payload["table"]["rows"][0]) == {
+        "client_id",
+        "order_id",
+        "order_date",
+        "delivery_date",
+        "carrier",
+        "origin_city",
+        "destination_city",
+        "status",
+        "sku",
+        "product_category",
+        "quantity",
+        "unit_price_usd",
+        "order_value_usd",
+        "is_promo",
+        "promo_discount_pct",
+        "region",
+        "warehouse",
+    }
 
 
 def test_analytics_response_cache_reports_hit():

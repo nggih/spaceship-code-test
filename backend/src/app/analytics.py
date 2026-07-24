@@ -336,16 +336,27 @@ def dashboard_payload(query: AnalyticsQuery) -> dict[str, object]:
     ).chart
     detail_rows = [
         {
+            "client_id": row.client_id,
             "order_id": row.order_id,
             "order_date": row.order_date.isoformat(),
+            "delivery_date": (
+                row.delivery_date.isoformat() if row.delivery_date else None
+            ),
             "carrier": row.carrier,
-            "destination": row.destination_city,
+            "origin_city": row.origin_city,
+            "destination_city": row.destination_city,
             "status": row.status,
-            "category": row.product_category,
+            "sku": row.sku,
+            "product_category": row.product_category,
             "quantity": row.quantity,
-            "value": row.order_value_usd,
+            "unit_price_usd": row.unit_price_usd,
+            "order_value_usd": row.order_value_usd,
+            "is_promo": row.is_promo,
+            "promo_discount_pct": row.promo_discount_pct,
+            "region": row.region,
+            "warehouse": row.warehouse,
         }
-        for row in filtered[:100]
+        for row in filtered
     ]
     return {
         "kpis": kpis,

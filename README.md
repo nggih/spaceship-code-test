@@ -6,6 +6,7 @@ An AI-powered logistics analytics dashboard built for the coding assignment in [
 
 - Five required KPIs with shared filters
 - Order-volume, delivery-status, and carrier-delay charts
+- Dedicated, searchable source-data tab with filters and pagination
 - Natural-language analytics through OpenRouter
 - Delay-driver diagnostics with explicit correlation/causation warnings
 - Structured query plans and explainability

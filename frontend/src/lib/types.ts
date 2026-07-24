@@ -108,7 +108,7 @@ export type DashboardData = {
     carriers: ChartSpec;
   };
   table: {
-    rows: Record<string, string | number>[];
+    rows: Record<string, string | number | boolean | null>[];
     total: number;
   };
   data_anchor: string;
