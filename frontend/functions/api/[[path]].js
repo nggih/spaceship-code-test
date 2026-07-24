@@ -10,7 +10,7 @@ export async function onRequest(context) {
   const headers = new Headers(context.request.headers);
   headers.delete("host");
 
-  return fetch(
+  const upstreamResponse = await fetch(
     new Request(upstream, {
       method: context.request.method,
       headers,
@@ -19,6 +19,10 @@ export async function onRequest(context) {
           ? undefined
           : context.request.body,
       redirect: "manual",
+      cache: "no-store",
     }),
   );
+  const response = new Response(upstreamResponse.body, upstreamResponse);
+  response.headers.set("Cache-Control", "no-store");
+  return response;
 }

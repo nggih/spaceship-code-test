@@ -105,7 +105,7 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    if request.url.path.startswith(("/api/auth", "/api/conversations")):
+    if request.url.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
     if _binding(request, "ENVIRONMENT", "development") == "production":
         response.headers["Strict-Transport-Security"] = (
