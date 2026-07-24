@@ -7,7 +7,7 @@ base_dir = "src"
 
 [vars]
 ENVIRONMENT = "production"
-OPENROUTER_MODEL = "openrouter/free"
+OPENROUTER_MODEL = "google/gemma-4-26b-a4b-it:free"
 ALLOWED_ORIGINS = "https://your-project.pages.dev"
 PUBLIC_APP_URL = "https://your-project.pages.dev"
 

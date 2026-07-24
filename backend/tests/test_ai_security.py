@@ -4,7 +4,7 @@ import httpx
 import pytest
 from fastapi import HTTPException
 
-from app.ai import deterministic_fallback, interpret_question
+from app.ai import interpret_question
 from app.security import _requests, check_rate_limit
 
 
@@ -82,18 +82,3 @@ def test_rate_limit():
     with pytest.raises(HTTPException) as error:
         check_rate_limit("test-ip")
     assert error.value.status_code == 429
-
-
-@pytest.mark.parametrize(
-    ("question", "metric", "dimension"),
-    [
-        ("Show delayed orders by week for the last 3 months", "delayed_orders", "week"),
-        ("Which carrier has the highest delay rate?", "delay_rate", "carrier"),
-        ("How many orders were delivered late last month?", "delayed_orders", None),
-    ],
-)
-def test_documented_query_fallbacks(question, metric, dimension):
-    plan = deterministic_fallback(question)
-    assert plan is not None
-    assert plan.metric == metric
-    assert plan.dimension == dimension

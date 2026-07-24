@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
-from datetime import date, timedelta
 
 import httpx
 from fastapi import HTTPException
@@ -13,6 +11,7 @@ from .data import DATA_MAX_DATE, DATA_MIN_DATE, metadata
 from .models import AnalysisPlan
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+DEFAULT_MODEL = "google/gemma-4-26b-a4b-it:free"
 
 
 def _system_prompt() -> str:
@@ -26,49 +25,6 @@ Allowed values: {json.dumps(data['filters'])}.
 Return only the requested JSON schema."""
 
 
-def deterministic_fallback(question: str) -> AnalysisPlan | None:
-    """Cover the documented query subset when free-model output is malformed."""
-    normalized = re.sub(r"\s+", " ", question.lower().strip())
-    if "delayed orders" in normalized and "by week" in normalized:
-        start = DATA_MAX_DATE - timedelta(days=92)
-        return AnalysisPlan(
-            intent="analytics",
-            metric="delayed_orders",
-            dimension="week",
-            time_grain="week",
-            filters={
-                "start_date": start,
-                "end_date": DATA_MAX_DATE,
-                "statuses": ["delayed"],
-            },
-        )
-    if "carrier" in normalized and "highest delay rate" in normalized:
-        return AnalysisPlan(
-            intent="analytics",
-            metric="delay_rate",
-            dimension="carrier",
-            sort="desc",
-            limit=9,
-        )
-    if (
-        ("delivered late" in normalized or "late orders" in normalized)
-        and "last month" in normalized
-    ):
-        current_month = DATA_MAX_DATE.replace(day=1)
-        end = current_month - timedelta(days=1)
-        start = date(end.year, end.month, 1)
-        return AnalysisPlan(
-            intent="analytics",
-            metric="delayed_orders",
-            filters={
-                "start_date": start,
-                "end_date": end,
-                "statuses": ["delayed"],
-            },
-        )
-    return None
-
-
 async def interpret_question(
     question: str,
     api_key: str | None = None,
@@ -78,12 +34,9 @@ async def interpret_question(
     api_key = api_key or os.getenv("OPENROUTER_API_KEY")
     if not api_key:
         raise HTTPException(status_code=503, detail="AI interpretation is not configured.")
-    supported_plan = deterministic_fallback(question)
-    if supported_plan:
-        return supported_plan, "validated-supported-query-parser"
     schema = AnalysisPlan.model_json_schema()
     request_body = {
-        "model": model_name or os.getenv("OPENROUTER_MODEL", "openrouter/free"),
+        "model": model_name or os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL),
         "messages": [
             {"role": "system", "content": _system_prompt()},
             {"role": "user", "content": question},
@@ -108,7 +61,7 @@ async def interpret_question(
         "X-Title": "Logistics Intelligence",
     }
     last_error: Exception | None = None
-    for attempt in range(2):
+    for attempt in range(3):
         if attempt:
             request_body["messages"] = [
                 *request_body["messages"],
@@ -146,9 +99,6 @@ async def interpret_question(
         except (ValueError, KeyError, IndexError, ValidationError) as exc:
             last_error = exc
 
-    fallback = deterministic_fallback(question)
-    if fallback:
-        return fallback, "deterministic-fallback-after-openrouter"
     if isinstance(last_error, httpx.TimeoutException):
         raise HTTPException(status_code=503, detail="The free AI model timed out.")
     raise HTTPException(

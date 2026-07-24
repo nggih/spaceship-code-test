@@ -5,7 +5,7 @@ import uuid
 
 from fastapi import FastAPI, HTTPException, Request, Response
 
-from .ai import interpret_question
+from .ai import DEFAULT_MODEL, interpret_question
 from .analytics import dashboard_payload, run_analytics
 from .data import DATA_MAX_DATE, DATA_MIN_DATE, ORDERS, metadata
 from .forecast import run_forecast
@@ -117,7 +117,7 @@ async def ask(payload: AskRequest, request: Request) -> AnalyticsResponse:
     plan, model = await interpret_question(
         payload.question,
         api_key=_binding(request, "OPENROUTER_API_KEY"),
-        model_name=_binding(request, "OPENROUTER_MODEL", "openrouter/free"),
+        model_name=_binding(request, "OPENROUTER_MODEL", DEFAULT_MODEL),
         public_app_url=_binding(request, "PUBLIC_APP_URL", "http://localhost:5173"),
     )
     try:

@@ -61,7 +61,7 @@ npm run build
 | Variable | Exposure | Purpose |
 |---|---|---|
 | `OPENROUTER_API_KEY` | Secret, backend only | Dedicated OpenRouter inference key |
-| `OPENROUTER_MODEL` | Backend | Defaults to `openrouter/free` |
+| `OPENROUTER_MODEL` | Backend | Defaults to `google/gemma-4-26b-a4b-it:free` |
 | `TURNSTILE_SECRET_KEY` | Secret, backend only | Server-side challenge verification |
 | `VITE_TURNSTILE_SITE_KEY` | Public | Browser Turnstile widget |
 | `VITE_API_URL` | Public | Production Worker base URL; blank uses same origin/proxy |
@@ -91,7 +91,7 @@ React dashboard
        computed answer + chart contract + table + explanation
 ```
 
-The AI is an interpreter, not the source of truth. The three documented reviewer queries use a tested deterministic parser for predictable demo behavior; other supported questions are interpreted through OpenRouter. OpenRouter sees the schema, available filter values, and dataset date range—not the dataset rows. Every path returns a strict `AnalysisPlan`; the backend rejects unknown fields and computes the result with deterministic code. Raw AI-generated SQL and arbitrary ECharts options are never accepted.
+The AI is an interpreter, not the source of truth. Every natural-language question is interpreted through OpenRouter. The model sees the schema, available filter values, and dataset date range—not the dataset rows—and must return a strict `AnalysisPlan`. The backend rejects unknown fields and computes the result with deterministic code. Raw AI-generated SQL and arbitrary ECharts options are never accepted.
 
 The frontend maps five approved semantic chart types to locally owned ECharts builders. That keeps model output away from executable presentation configuration.
 
@@ -134,7 +134,7 @@ Use a dedicated OpenRouter inference key:
 1. Add only the amount you are prepared to spend.
 2. Set the key to a **$5 lifetime limit** with no reset.
 3. Disable automatic top-up.
-4. Keep the model as `openrouter/free`.
+4. Keep the model pinned to `google/gemma-4-26b-a4b-it:free`.
 5. Store the key only as a Worker secret.
 
 The public AI endpoint additionally requires Turnstile in production, permits five attempts per IP per ten-minute Worker-isolate window, limits questions to 500 characters, caps model output, applies an upstream timeout, and does not log secrets or full model responses.
@@ -183,7 +183,7 @@ cd frontend && npm test && npm run build
 - A database would add operational cost without improving this read-only 400-row exercise.
 - Relative dates use the latest dataset date so assignment examples remain meaningful.
 - The in-memory per-IP limiter is best-effort per Worker isolate; Turnstile and the OpenRouter key limit provide the durable abuse boundaries.
-- The free router may be slow, rate-limited, or temporarily unavailable. The UI reports this rather than fabricating results.
+- The pinned free model may be slow, rate-limited, or temporarily unavailable. The UI reports this rather than fabricating results.
 
 ## Limitations
 
