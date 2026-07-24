@@ -28,7 +28,7 @@ describe("LoginScreen", () => {
       target: { value: "reviewer" },
     });
     fireEvent.change(screen.getByLabelText("Password"), {
-      target: { value: "correct-password" },
+      target: { value: "Correct-Password9!" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
@@ -37,7 +37,7 @@ describe("LoginScreen", () => {
     expect(request.credentials).toBe("include");
     expect(JSON.parse(String(request.body))).toEqual({
       username: "reviewer",
-      password: "correct-password",
+      password: "Correct-Password9!",
     });
   });
 
@@ -54,7 +54,7 @@ describe("LoginScreen", () => {
       target: { value: "reviewer" },
     });
     fireEvent.change(screen.getByLabelText("Password"), {
-      target: { value: "wrong" },
+      target: { value: "Wrong-Password9!" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
@@ -75,5 +75,28 @@ describe("LoginScreen", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Hide password" }));
     expect(password).toHaveAttribute("type", "password");
+  });
+
+  it("shows password requirements and enables submit only when they pass", () => {
+    render(<LoginScreen onAuthenticated={vi.fn()} />);
+    const password = screen.getByLabelText("Password");
+    const submit = screen.getByRole("button", { name: "Continue" });
+
+    expect(screen.getByText("Must contain")).toBeInTheDocument();
+    expect(screen.getByText("12–128 characters")).toBeInTheDocument();
+    expect(screen.getByText("One uppercase letter")).toBeInTheDocument();
+    expect(screen.getByText("One lowercase letter")).toBeInTheDocument();
+    expect(screen.getByText("One number")).toBeInTheDocument();
+    expect(screen.getByText("One symbol")).toBeInTheDocument();
+    expect(screen.getByText("No spaces")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Username"), {
+      target: { value: "reviewer" },
+    });
+    fireEvent.change(password, { target: { value: "weak" } });
+    expect(submit).toBeDisabled();
+
+    fireEvent.change(password, { target: { value: "Correct-Password9!" } });
+    expect(submit).toBeEnabled();
   });
 });

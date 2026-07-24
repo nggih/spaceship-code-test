@@ -11,7 +11,7 @@ test("signs in with reviewer credentials and signs out", async ({ page }) => {
   await page.route("**/api/auth/login", async (route) => {
     expect(route.request().postDataJSON()).toEqual({
       username: "reviewer",
-      password: "test-password",
+      password: "Test-Password9!",
     });
     await route.fulfill({
       status: 200,
@@ -31,7 +31,7 @@ test("signs in with reviewer credentials and signs out", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /Your logistics data/i })).toBeVisible();
   await page.getByLabel("Username").fill("reviewer");
-  await page.getByLabel("Password").fill("test-password");
+  await page.getByLabel("Password", { exact: true }).fill("Test-Password9!");
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByText("reviewer@local.account")).toBeVisible();
   await expect(page.getByRole("heading", { name: /See where orders move/i })).toBeVisible();

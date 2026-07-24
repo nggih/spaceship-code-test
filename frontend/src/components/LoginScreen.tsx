@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import {
   Activity,
   ArrowRight,
+  Check,
   Eye,
   EyeOff,
   LockKeyhole,
@@ -11,6 +12,33 @@ import {
 import { api } from "../lib/api";
 import type { AuthUser } from "../lib/types";
 import { Button, Card } from "./ui";
+
+const passwordRules = [
+  {
+    label: "12–128 characters",
+    test: (value: string) => value.length >= 12 && value.length <= 128,
+  },
+  {
+    label: "One uppercase letter",
+    test: (value: string) => [...value].some((character) => character.toUpperCase() === character && character.toLowerCase() !== character),
+  },
+  {
+    label: "One lowercase letter",
+    test: (value: string) => [...value].some((character) => character.toLowerCase() === character && character.toUpperCase() !== character),
+  },
+  {
+    label: "One number",
+    test: (value: string) => [...value].some((character) => /\d/.test(character)),
+  },
+  {
+    label: "One symbol",
+    test: (value: string) => [...value].some((character) => !character.match(/[\p{L}\p{N}\s]/u)),
+  },
+  {
+    label: "No spaces",
+    test: (value: string) => !/\s/.test(value),
+  },
+] as const;
 
 export function LoginScreen({
   onAuthenticated,
@@ -24,6 +52,11 @@ export function LoginScreen({
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(initialError);
   const [loading, setLoading] = useState(false);
+  const passwordRuleResults = passwordRules.map((rule) => ({
+    ...rule,
+    passed: rule.test(password),
+  }));
+  const passwordMeetsPolicy = passwordRuleResults.every((rule) => rule.passed);
 
   useEffect(() => {
     setError(initialError);
@@ -105,13 +138,15 @@ export function LoginScreen({
                 placeholder="Enter username"
               />
             </label>
-            <label className="grid gap-2 text-xs font-medium text-[#b9c7c2]">
-              Password
+            <div className="grid gap-2 text-xs font-medium text-[#b9c7c2]">
+              <label htmlFor="login-password">Password</label>
               <span className="relative block">
                 <input
+                  id="login-password"
                   required
                   type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
+                  aria-describedby="password-requirements"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   className="h-12 w-full rounded-xl border border-white/10 bg-[#07110f] px-4 pr-12 text-sm text-white outline-none transition placeholder:text-[#60736d] focus:border-[#b9f55b]/50 focus:ring-2 focus:ring-[#b9f55b]/10"
@@ -127,7 +162,38 @@ export function LoginScreen({
                   {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
                 </button>
               </span>
-            </label>
+            </div>
+            <div
+              id="password-requirements"
+              aria-live="polite"
+              className="rounded-xl border border-white/8 bg-black/10 p-3"
+            >
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[.14em] text-[#8fa19b]">
+                Must contain
+              </p>
+              <ul className="grid grid-cols-2 gap-x-3 gap-y-2">
+                {passwordRuleResults.map((rule) => (
+                  <li
+                    key={rule.label}
+                    className={`flex items-center gap-1.5 text-[11px] transition ${
+                      rule.passed ? "text-[#72ebc8]" : "text-[#71837d]"
+                    }`}
+                  >
+                    <span
+                      className={`grid h-3.5 w-3.5 shrink-0 place-items-center rounded-full border ${
+                        rule.passed
+                          ? "border-[#49dcb1]/50 bg-[#49dcb1]/10"
+                          : "border-white/15"
+                      }`}
+                      aria-hidden="true"
+                    >
+                      {rule.passed && <Check size={9} strokeWidth={3} />}
+                    </span>
+                    {rule.label}
+                  </li>
+                ))}
+              </ul>
+            </div>
             {error && (
               <p
                 role="alert"
@@ -139,7 +205,7 @@ export function LoginScreen({
             <Button
               type="submit"
               className="mt-2 h-12 w-full"
-              disabled={loading || !username || !password}
+              disabled={loading || !username || !passwordMeetsPolicy}
             >
               {loading ? "Signing in…" : "Continue"}
               {!loading && <ArrowRight size={16} />}
