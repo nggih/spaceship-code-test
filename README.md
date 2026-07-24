@@ -8,6 +8,7 @@ An AI-powered logistics analytics dashboard built for the coding assignment in [
 - Order-volume, delivery-status, and carrier-delay charts
 - Dedicated, searchable source-data tab with filters and pagination
 - Natural-language analytics through OpenRouter
+- Visible routed-model and selected-tool provenance on every AI response
 - Delay-driver diagnostics with explicit correlation/causation warnings
 - Structured query plans and explainability
 - Overall, category, and guarded low-confidence SKU forecasts

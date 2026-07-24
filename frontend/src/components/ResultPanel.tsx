@@ -1,5 +1,6 @@
 import { Braces, Database, Info } from "lucide-react";
 import type { AnalyticsResult } from "../lib/types";
+import { AIResponseMeta } from "./AIResponseMeta";
 import { LazyChart } from "./LazyChart";
 import { Badge, Card } from "./ui";
 
@@ -23,6 +24,7 @@ export function ResultPanel({ result }: { result: AnalyticsResult }) {
     : [];
   return (
     <div className="grid gap-4">
+      <AIResponseMeta meta={result.meta} />
       <div className="rounded-xl border border-[#b9f55b]/15 bg-[#b9f55b]/5 p-4 text-sm leading-6 text-[#e5f0ec]">
         {result.answer}
       </div>

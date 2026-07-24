@@ -27,6 +27,8 @@ const result: AnalyticsResult = {
     warnings: [],
   },
   meta: {
+    model: "test/forecast-model:free",
+    tool: "forecast_demand",
     requested_method: "auto",
     inventory_recommendation: 104,
     safety_stock_percent: 15,
@@ -57,5 +59,12 @@ describe("ResultPanel", () => {
     expect(screen.getByText("3-month moving average")).toBeInTheDocument();
     expect(screen.getByText("29.44")).toBeInTheDocument();
     expect(screen.getByText(/104 units/)).toBeInTheDocument();
+    const provenance = screen.getByRole("group", {
+      name: "AI response provenance",
+    });
+    expect(provenance).toHaveTextContent("Model");
+    expect(provenance).toHaveTextContent("test/forecast-model:free");
+    expect(provenance).toHaveTextContent("Tool");
+    expect(provenance).toHaveTextContent("forecast_demand");
   });
 });

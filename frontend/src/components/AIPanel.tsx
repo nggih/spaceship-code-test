@@ -18,6 +18,7 @@ import type {
   ConversationTurn,
   StoredMessage,
 } from "../lib/types";
+import { AIResponseMeta } from "./AIResponseMeta";
 import { Button, Card, Skeleton } from "./ui";
 import { ResultPanel } from "./ResultPanel";
 
@@ -412,6 +413,7 @@ export function AIPanel({ focusRequest = 0 }: { focusRequest?: number }) {
                         <ResultPanel result={message.result} />
                       ) : message.result?.kind === "clarification" ? (
                         <div className="grid gap-3 rounded-2xl rounded-tl-md border border-[#f4a261]/20 bg-[#f4a261]/5 p-4">
+                          <AIResponseMeta meta={message.result.meta} />
                           <p className="text-sm leading-6 text-[#f3ddc7]">
                             {message.result.message}
                           </p>

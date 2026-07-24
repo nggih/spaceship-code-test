@@ -117,7 +117,7 @@ test("supports a multi-turn AI conversation and sends bounded context", async ({
           ? ["Compare carrier delay rates"]
           : ["Show the highest delay rate"],
         query_plan: { intent: "clarification" },
-        meta: { model: "test-model" },
+        meta: { model: "test-model", tool: "request_clarification" },
       }),
     });
   });
@@ -176,6 +176,11 @@ test("supports a multi-turn AI conversation and sends bounded context", async ({
   await input.fill("Why?");
   await page.getByRole("button", { name: "Send message" }).click();
   await expect(page.getByText("Which carrier or region should I compare?")).toBeVisible();
+  const clarificationProvenance = page
+    .getByRole("group", { name: "AI response provenance" })
+    .first();
+  await expect(clarificationProvenance).toContainText("test-model");
+  await expect(clarificationProvenance).toContainText("request_clarification");
 
   await input.fill("Compare carrier delay rates");
   await page.getByRole("button", { name: "Send message" }).click();
@@ -309,6 +314,11 @@ test("restores, renames, and deletes account conversation history", async ({ pag
       .filter({ hasText: "Which carrier has the highest delay rate?" }),
   ).toBeVisible();
   await expect(page.getByText(result.answer, { exact: true })).toBeVisible();
+  const resultProvenance = page.getByRole("group", {
+    name: "AI response provenance",
+  });
+  await expect(resultProvenance).toContainText("test-model");
+  await expect(resultProvenance).toContainText("query_logistics_analytics");
 
   await page.getByRole("button", { name: "Rename Saved carrier analysis" }).click();
   await page.getByRole("textbox", { name: "Conversation title" }).fill("Carrier risk review");
