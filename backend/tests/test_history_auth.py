@@ -4,6 +4,8 @@ from app.auth import (
     AuthUser,
     _validate_claims,
     create_credential_session,
+    password_policy_errors,
+    password_policy_valid,
     verify_credential_session,
 )
 from app.main import app
@@ -50,12 +52,41 @@ def test_credential_session_is_signed_and_expires():
     )
 
 
+def test_password_policy_requires_length_and_character_classes():
+    assert password_policy_valid("Correct-Horse9!")
+    assert not password_policy_valid("short")
+    assert not password_policy_valid("alllowercase9!")
+    assert not password_policy_valid("ALLUPPERCASE9!")
+    assert not password_policy_valid("NoNumbersHere!")
+    assert not password_policy_valid("NoSymbolsHere9")
+    assert not password_policy_valid("Has Whitespace9!")
+    assert "at least 12 characters" in password_policy_errors("Short9!")
+
+
+def test_login_refuses_a_weak_configured_password(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("USERNAME", "reviewer")
+    monkeypatch.setenv("PASSWORD", "weak")
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "independent-session-secret")
+    _login_requests.clear()
+
+    response = TestClient(app).post(
+        "/api/auth/login",
+        json={"username": "reviewer", "password": "weak"},
+    )
+    assert response.status_code == 503
+    assert (
+        response.json()["detail"]
+        == "Configured login password does not meet the security policy."
+    )
+
+
 def test_login_cookie_protects_api_and_logout_revokes_browser_session(
     monkeypatch, tmp_path
 ):
     monkeypatch.setenv("ENVIRONMENT", "development")
     monkeypatch.setenv("USERNAME", "reviewer")
-    monkeypatch.setenv("PASSWORD", "correct-password")
+    monkeypatch.setenv("PASSWORD", "Correct-Password9!")
     monkeypatch.setenv("AUTH_SESSION_SECRET", "independent-session-secret")
     monkeypatch.setenv("HISTORY_DB_PATH", str(tmp_path / "history.db"))
     _login_requests.clear()
@@ -71,7 +102,7 @@ def test_login_cookie_protects_api_and_logout_revokes_browser_session(
 
     login = client.post(
         "/api/auth/login",
-        json={"username": "reviewer", "password": "correct-password"},
+        json={"username": "reviewer", "password": "Correct-Password9!"},
     )
     assert login.status_code == 200
     assert login.json()["name"] == "reviewer"

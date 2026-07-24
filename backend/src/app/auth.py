@@ -14,6 +14,8 @@ from fastapi import HTTPException, Request
 _jwks_cache: dict[str, Any] = {"expires_at": 0.0, "keys": []}
 AUTH_COOKIE_NAME = "logistics_session"
 AUTH_SESSION_TTL_SECONDS = 8 * 60 * 60
+PASSWORD_MIN_LENGTH = 12
+PASSWORD_MAX_LENGTH = 128
 
 
 @dataclass(frozen=True)
@@ -51,6 +53,32 @@ def _decode_bytes(value: str) -> bytes:
 def credential_subject(username: str) -> str:
     digest = hashlib.sha256(username.casefold().encode("utf-8")).hexdigest()
     return f"credentials:{digest}"
+
+
+def password_policy_errors(password: str) -> tuple[str, ...]:
+    errors: list[str] = []
+    if len(password) < PASSWORD_MIN_LENGTH:
+        errors.append(f"at least {PASSWORD_MIN_LENGTH} characters")
+    if len(password) > PASSWORD_MAX_LENGTH:
+        errors.append(f"at most {PASSWORD_MAX_LENGTH} characters")
+    if not any(character.islower() for character in password):
+        errors.append("a lowercase letter")
+    if not any(character.isupper() for character in password):
+        errors.append("an uppercase letter")
+    if not any(character.isdigit() for character in password):
+        errors.append("a number")
+    if not any(
+        not character.isalnum() and not character.isspace()
+        for character in password
+    ):
+        errors.append("a symbol")
+    if any(character.isspace() for character in password):
+        errors.append("no whitespace")
+    return tuple(errors)
+
+
+def password_policy_valid(password: str | None) -> bool:
+    return bool(password) and not password_policy_errors(password)
 
 
 def create_credential_session(

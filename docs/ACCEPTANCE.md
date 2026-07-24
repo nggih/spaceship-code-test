@@ -23,6 +23,7 @@ This checklist consolidates the requirements from `Coding_assignment.md` and `lo
 - [x] D1-backed, account-owned conversation history with restore, rename, and delete
 - [x] Reviewer login screen with signed HttpOnly cookie and logout
 - [x] Login throttling, generic credential errors, and anonymous API rejection
+- [x] Server-enforced reviewer password complexity policy
 - [x] Cloudflare Access JWT verification and cross-user ownership enforcement
 - [x] shadcn/ui component structure, Tailwind CSS, and ECharts
 - [x] Public-host configuration for Cloudflare
@@ -30,7 +31,7 @@ This checklist consolidates the requirements from `Coding_assignment.md` and `lo
 - [x] Secret-safe configuration
 - [x] Optional first-AI-request Turnstile; authenticated sessions do not require it
 - [x] Body/history limits, exact CORS, and two-layer AI throttling
-- [x] Backend tests (41 passing)
+- [x] Backend tests (43 passing)
 - [x] Frontend lint, unit tests (9 passing), production build, and Playwright (12 passing)
 - [x] Docker Compose smoke test on frontend port 3000
 - [x] Architecture, assumptions, limitations, and future improvements documented

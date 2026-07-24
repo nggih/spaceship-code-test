@@ -24,6 +24,22 @@ The existing Cloudflare Access validator remains available as an optional
 enterprise identity layer. When a valid Access assertion is present, it takes
 precedence over credential login.
 
+## Password policy
+
+The configured reviewer password must:
+
+- Contain 12–128 characters
+- Include at least one uppercase letter
+- Include at least one lowercase letter
+- Include at least one number
+- Include at least one non-whitespace symbol
+- Contain no whitespace
+
+The backend validates this policy against the configured secret and refuses
+login with a configuration error when it is not satisfied. It does not reveal
+which rule failed during login. Incorrect credentials always receive the same
+generic response.
+
 ## Local Docker
 
 Add the following only to the ignored `.env` file:

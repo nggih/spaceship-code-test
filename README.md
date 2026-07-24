@@ -25,7 +25,8 @@ The two supplied specifications are consistent. [`Coding_assignment.md`](docs/Co
 - API health: <https://logistics-intelligence-api.nggih.workers.dev/api/health>
 - Public repository: <https://github.com/nggih/spaceship-code-test>
 
-The production architecture uses a backend-verified reviewer login, a signed
+The production architecture uses a backend-verified reviewer login with an
+enforced password policy, a signed
 HttpOnly session cookie, account-scoped D1 history, exact-origin requests,
 encrypted Worker secrets, and a Cloudflare Rate Limiting binding. Optional
 Cloudflare Access JWT validation is also supported. Reviewer credentials are

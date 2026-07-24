@@ -15,6 +15,7 @@ from .auth import (
     AuthUser,
     create_credential_session,
     credential_subject,
+    password_policy_valid,
     require_user,
 )
 from .cache import analytics_cache, dashboard_cache, diagnostic_cache, forecast_cache
@@ -118,14 +119,23 @@ async def security_headers(request: Request, call_next):
 
 @app.get("/api/health")
 async def health(request: Request) -> dict[str, object]:
+    configured_username = _binding(request, "USERNAME")
+    configured_password = _binding(request, "PASSWORD")
+    environment = _binding(request, "ENVIRONMENT", "development")
+    session_secret = _binding(request, "AUTH_SESSION_SECRET")
     return {
         "status": "ok",
         "dataset_rows": len(ORDERS),
         "data_min_date": DATA_MIN_DATE,
         "data_max_date": DATA_MAX_DATE,
         "ai_configured": bool(_binding(request, "OPENROUTER_API_KEY")),
-        "auth_required": _binding(request, "ENVIRONMENT", "development")
-        == "production",
+        "auth_required": environment == "production",
+        "auth_configured": bool(
+            configured_username
+            and configured_password
+            and (session_secret or environment != "production")
+        ),
+        "password_policy_valid": password_policy_valid(configured_password),
         "history_configured": (
             _runtime_binding(request, "CONVERSATIONS_DB") is not None
             or _binding(request, "HISTORY_DB_PATH") is not None
@@ -360,6 +370,11 @@ async def auth_login(
         session_secret = configured_password
     if not configured_username or not configured_password or not session_secret:
         raise HTTPException(status_code=503, detail="Login is not configured.")
+    if not password_policy_valid(configured_password):
+        raise HTTPException(
+            status_code=503,
+            detail="Configured login password does not meet the security policy.",
+        )
     valid_username = hmac.compare_digest(payload.username, configured_username)
     valid_password = hmac.compare_digest(payload.password, configured_password)
     if not (valid_username and valid_password):
