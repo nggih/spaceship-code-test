@@ -27,7 +27,7 @@ docker compose up --build
 
 Open:
 
-- Dashboard: <http://localhost:5173>
+- Dashboard: <http://localhost:3000>
 - API documentation: <http://localhost:8000/docs>
 - API health: <http://localhost:8000/api/health>
 
