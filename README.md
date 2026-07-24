@@ -226,3 +226,7 @@ cd frontend && npm run lint && npm test && npm run build && npm run test:e2e
 - Add Durable Objects for an exact globally consistent 10-minute window and shared query history.
 - Evaluate forecasting methods with rolling backtests and confidence intervals.
 - Add server-side semantic-plan caching after privacy and invalidation review.
+
+## AI usage disclosure
+
+This project was built with AI coding assistants (Anthropic Claude Code and OpenAI Codex) used for scaffolding, implementation, tests, and documentation. All architecture, data-correctness decisions, and final code were reviewed and verified by the author. The AI-orchestration layer of the running application uses an OpenRouter-hosted model strictly to interpret natural-language questions into a validated query plan; it never computes results or generates answers directly.

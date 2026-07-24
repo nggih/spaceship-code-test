@@ -261,7 +261,9 @@ def run_analytics(query: AnalyticsQuery) -> AnalyticsResponse:
     ]
     if dimension not in {"day", "week", "month"}:
         rows.sort(key=lambda row: row["value"], reverse=query.sort == "desc")
-    rows = rows[: query.limit]
+        rows = rows[: query.limit]
+    # Time-series rows are left un-truncated: they are chronological, so a limit
+    # would silently drop the most recent periods the question usually asks about.
     total = calculate_metric(query.metric, filtered)
 
     chart_type = "table"

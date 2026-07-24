@@ -129,8 +129,7 @@ async def analytics(query: AnalyticsQuery) -> AnalyticsResponse:
         result, hit = analytics_cache.get_or_set(
             _cache_key("analytics", query), lambda: run_analytics(query)
         )
-        result.meta["cache_hit"] = hit
-        return result
+        return result.model_copy(update={"meta": {**result.meta, "cache_hit": hit}})
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -141,8 +140,7 @@ async def forecast(query: ForecastQuery) -> AnalyticsResponse:
         result, hit = forecast_cache.get_or_set(
             _cache_key("forecast", query), lambda: run_forecast(query)
         )
-        result.meta["cache_hit"] = hit
-        return result
+        return result.model_copy(update={"meta": {**result.meta, "cache_hit": hit}})
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -153,8 +151,7 @@ async def diagnostics(query: DiagnosticQuery) -> AnalyticsResponse:
         result, hit = diagnostic_cache.get_or_set(
             _cache_key("diagnostic", query), lambda: run_diagnostic(query)
         )
-        result.meta["cache_hit"] = hit
-        return result
+        return result.model_copy(update={"meta": {**result.meta, "cache_hit": hit}})
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -247,7 +244,13 @@ async def ask(
             )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    result.meta.update(
-        {"model": model, "question": payload.question, "cache_hit": cache_hit}
+    return result.model_copy(
+        update={
+            "meta": {
+                **result.meta,
+                "model": model,
+                "question": payload.question,
+                "cache_hit": cache_hit,
+            }
+        }
     )
-    return result
