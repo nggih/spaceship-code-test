@@ -307,3 +307,15 @@ class DiagnosticQuery(BaseModel):
     filters: QueryFilters = Field(default_factory=QueryFilters)
     minimum_sample: int = Field(default=5, ge=3, le=50)
     limit: int = Field(default=10, ge=1, le=25)
+
+
+class DiagnosticToolInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    filters: QueryFilters = Field(default_factory=QueryFilters)
+
+
+class ClarificationToolInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    question: str = Field(min_length=3, max_length=300)

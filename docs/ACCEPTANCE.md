@@ -7,6 +7,7 @@ This checklist consolidates the requirements from `Coding_assignment.md` and `lo
 - [x] Shared dataset and filters
 - [x] Multi-turn natural-language conversation interface
 - [x] Bounded prior-turn context for follow-up questions
+- [x] Native OpenRouter function-tool selection with Pydantic-validated arguments
 - [x] Validated AI orchestration rather than AI-generated answers
 - [x] No deterministic natural-language parser, text-to-SQL, or AI code execution
 - [x] Production prompt contract for metrics, dates, routing, ambiguity, and examples

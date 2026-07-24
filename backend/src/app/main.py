@@ -32,6 +32,7 @@ app = FastAPI(
     description="Validated, read-only analytics for the logistics assignment dataset.",
 )
 
+
 def _binding(request: Request, name: str, default: str | None = None) -> str | None:
     worker_env = request.scope.get("env")
     if worker_env is not None:
@@ -76,9 +77,7 @@ async def security_headers(request: Request, call_next):
     if origin:
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = (
-            "Content-Type, X-AI-Session"
-        )
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-AI-Session"
         response.headers["Access-Control-Expose-Headers"] = "X-AI-Session"
         response.headers["Vary"] = "Origin"
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -163,9 +162,8 @@ async def diagnostics(query: DiagnosticQuery) -> AnalyticsResponse:
 async def ask(
     payload: AskRequest, request: Request, response: Response
 ) -> AnalyticsResponse | ClarificationResponse:
-    client_ip = (
-        request.headers.get("CF-Connecting-IP")
-        or (request.client.host if request.client else "unknown")
+    client_ip = request.headers.get("CF-Connecting-IP") or (
+        request.client.host if request.client else "unknown"
     )
     environment = _binding(request, "ENVIRONMENT", "development")
     session_secret = _binding(request, "AI_SESSION_SECRET")
@@ -199,6 +197,12 @@ async def ask(
         model_name=_binding(request, "OPENROUTER_MODEL", DEFAULT_MODEL),
         public_app_url=_binding(request, "PUBLIC_APP_URL", "http://localhost:3000"),
     )
+    selected_tool = {
+        "analytics": "query_logistics_analytics",
+        "diagnostic": "analyze_delay_drivers",
+        "forecast": "forecast_demand",
+        "clarification": "request_clarification",
+    }[plan.intent]
     if plan.intent == "clarification":
         return ClarificationResponse(
             message=plan.clarification_question
@@ -209,7 +213,11 @@ async def ask(
                 "Forecast PAPER demand for the next 3 months",
             ],
             query_plan=plan.model_dump(mode="json"),
-            meta={"model": model, "question": payload.question},
+            meta={
+                "model": model,
+                "question": payload.question,
+                "tool": selected_tool,
+            },
         )
     try:
         if plan.intent == "forecast":
@@ -250,6 +258,7 @@ async def ask(
             "meta": {
                 **result.meta,
                 "model": model,
+                "tool": selected_tool,
                 "question": payload.question,
                 "cache_hit": cache_hit,
             }

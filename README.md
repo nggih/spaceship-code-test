@@ -102,20 +102,22 @@ React dashboard
        first message: Turnstile → signed AI session
        follow-ups: validated AI session → rate limit
           ↓
-       OpenRouter structured interpretation
+       OpenRouter native function-tool selection
           ↓
-       Pydantic AnalysisPlan validation
+       Pydantic tool-argument validation
           ↓
        analytics OR diagnostic OR forecast tool
           ↓
        computed answer + chart contract + table + explanation
 ```
 
-The AI is an interpreter, not the source of truth. Every natural-language question is interpreted through OpenRouter—there is no deterministic natural-language parser. The production prompt defines metric synonyms, intent routing, date semantics, allowlisted entities, ambiguity rules, multi-turn follow-up behavior, and canonical assignment examples. The model receives at most four completed prior exchanges, the schema, available filter values, and dataset date range—not dataset rows—and must return a complete strict `AnalysisPlan` for the newest message.
+The AI is a tool selector, not the source of truth. Every natural-language question is interpreted through OpenRouter—there is no deterministic natural-language parser. The model receives four native function tools: `query_logistics_analytics`, `analyze_delay_drivers`, `forecast_demand`, and `request_clarification`. It must request exactly one tool; the application then validates the arguments and executes the mapped local Python function.
 
-The schema is inlined for provider portability, OpenRouter structured output is requested with `strict: true` and `require_parameters: true`, and Pydantic performs a second validation boundary. `openrouter/free` is attempted first; invalid or unavailable router output falls back to a known structured-output free model. The actual routed model is returned in result metadata. Unknown fields, values, and semantically inconsistent plans are rejected.
+Each tool has an inlined, closed JSON Schema generated from its Pydantic input model. OpenRouter receives `tool_choice: required`, strict function definitions, and `require_parameters: true`; Pydantic remains the final validation boundary before execution. `openrouter/free` is attempted first and automatically filters for tool-capable models; invalid or unavailable output falls back to a known tool-capable free model. The actual routed model and selected tool are returned in result metadata. Unknown tools, extra fields, invalid values, multiple calls, and semantically inconsistent arguments are rejected.
 
-There is no text-to-SQL and no model-generated code execution. Analytics and forecasting run only through allowlisted pure-Python functions. Cloudflare Sandboxes are therefore unnecessary for the current application.
+This uses OpenRouter's native function-calling protocol directly rather than adding LangChain or Strands. With four bounded, single-step tools, a general agent framework would add deployment weight and indirection without improving capability. The model suggests a function call; it never executes Python itself, and computed results are not sent through a second generative pass that could alter the numbers.
+
+There is no text-to-SQL and no model-generated code execution. Tool calls dispatch only to allowlisted pure-Python functions. Cloudflare Sandboxes are therefore unnecessary for the current application.
 
 The frontend maps five approved semantic chart types to locally owned ECharts builders. That keeps model output away from executable presentation configuration.
 

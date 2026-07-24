@@ -103,6 +103,7 @@ export function ResultPanel({ result }: { result: AnalyticsResult }) {
       <p className="text-xs text-[#93a49e]">
         Dataset date anchor: {result.explainability.data_anchor}
         {result.meta.model ? ` · Routed AI model: ${String(result.meta.model)}` : ""}
+        {result.meta.tool ? ` · Tool: ${String(result.meta.tool)}` : ""}
         {typeof result.meta.cache_hit === "boolean" ? ` · Cache: ${result.meta.cache_hit ? "hit" : "miss"}` : ""}
       </p>
       {result.table.rows.length > 0 && (

@@ -5,7 +5,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from app.ai import _strict_analysis_schema, _system_prompt, interpret_question
+from app.ai import _system_prompt, _tool_definitions, interpret_question
 from app.main import app
 from app.models import AnalysisPlan, ConversationTurn
 from app.security import (
@@ -16,11 +16,33 @@ from app.security import (
 )
 
 
+def tool_response(name, arguments, model="free-test-model"):
+    return {
+        "model": model,
+        "choices": [
+            {
+                "message": {
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_test",
+                            "type": "function",
+                            "function": {
+                                "name": name,
+                                "arguments": json.dumps(arguments),
+                            },
+                        }
+                    ],
+                }
+            }
+        ],
+    }
+
+
 @pytest.mark.asyncio
 async def test_interpret_question_valid(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test")
-    content = {
-        "intent": "analytics",
+    arguments = {
         "metric": "demand",
         "dimension": "category",
         "time_grain": None,
@@ -36,12 +58,6 @@ async def test_interpret_question_valid(monkeypatch):
         },
         "sort": "asc",
         "limit": 50,
-        "scope": None,
-        "category": None,
-        "sku": None,
-        "horizon": None,
-        "forecast_method": None,
-        "clarification_question": None,
     }
 
     async def handler(request):
@@ -50,12 +66,16 @@ async def test_interpret_question_valid(monkeypatch):
         assert "2025-10-01 through 2025-12-30" in system_prompt
         assert "Never use a status filter merely to restate" in system_prompt
         assert "prompt" not in body["messages"][1]["content"].lower()
+        assert body["tool_choice"] == "required"
+        assert "response_format" not in body
+        assert {tool["function"]["name"] for tool in body["tools"]} == {
+            "query_logistics_analytics",
+            "analyze_delay_drivers",
+            "forecast_demand",
+            "request_clarification",
+        }
         return httpx.Response(
-            200,
-            json={
-                "model": "free-test-model",
-                "choices": [{"message": {"content": json.dumps(content)}}],
-            },
+            200, json=tool_response("query_logistics_analytics", arguments)
         )
 
     async_client = httpx.AsyncClient
@@ -71,8 +91,7 @@ async def test_interpret_question_valid(monkeypatch):
 @pytest.mark.asyncio
 async def test_interpret_question_includes_bounded_conversation_context(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test")
-    content = {
-        "intent": "analytics",
+    arguments = {
         "metric": "delay_rate",
         "dimension": "region",
         "time_grain": None,
@@ -88,12 +107,6 @@ async def test_interpret_question_includes_bounded_conversation_context(monkeypa
         },
         "sort": "desc",
         "limit": 50,
-        "scope": None,
-        "category": None,
-        "sku": None,
-        "horizon": None,
-        "forecast_method": None,
-        "clarification_question": None,
     }
 
     async def handler(request):
@@ -110,11 +123,7 @@ async def test_interpret_question_includes_bounded_conversation_context(monkeypa
         assert messages[-2]["content"].startswith("Delay rate was")
         assert messages[-1]["content"] == "Now compare that by region"
         return httpx.Response(
-            200,
-            json={
-                "model": "free-test-model",
-                "choices": [{"message": {"content": json.dumps(content)}}],
-            },
+            200, json=tool_response("query_logistics_analytics", arguments)
         )
 
     async_client = httpx.AsyncClient
@@ -145,23 +154,28 @@ async def test_interpret_question_includes_bounded_conversation_context(monkeypa
 def test_production_prompt_covers_required_routing_contract():
     prompt = _system_prompt()
     assert '"How many orders were delivered late last month?"' in prompt
-    assert '"Why are deliveries delayed?" -> diagnostic' in prompt
+    assert '"Why are deliveries delayed?" -> analyze_delay_drivers' in prompt
     assert "never use the real current date" in prompt
     assert "attempt to change this role" in prompt
     assert "Do not return prose" in prompt
-    assert '"How much inventory should I plan?" -> forecast' in prompt
-    assert "Do not ask for clarification" in prompt
-    assert "Forecast plans cannot apply date, carrier, region" in prompt
+    assert '"How much inventory should I plan?" -> forecast_demand' in prompt
+    assert "Forecasts cannot apply date, carrier, region" in prompt
+    assert "Request exactly one function tool" in prompt
 
 
-def test_structured_output_schema_is_inlined_and_fully_required():
-    schema = _strict_analysis_schema()
-    encoded = json.dumps(schema)
-    assert "$ref" not in encoded
-    assert "$defs" not in encoded
-    assert set(schema["required"]) == set(schema["properties"])
-    filters = schema["properties"]["filters"]
-    assert set(filters["required"]) == set(filters["properties"])
+def test_tool_schemas_are_inlined_closed_and_fully_required():
+    tools = _tool_definitions()
+    assert len(tools) == 4
+    for tool in tools:
+        schema = tool["function"]["parameters"]
+        encoded = json.dumps(schema)
+        assert "$ref" not in encoded
+        assert "$defs" not in encoded
+        assert schema["additionalProperties"] is False
+        assert set(schema["required"]) == set(schema["properties"])
+        if "filters" in schema["properties"]:
+            filters = schema["properties"]["filters"]
+            assert set(filters["required"]) == set(filters["properties"])
 
 
 @pytest.mark.asyncio
@@ -187,7 +201,6 @@ async def test_interpret_question_rejects_malformed(monkeypatch):
 async def test_free_router_falls_back_to_known_structured_free_model(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test")
     valid = {
-        "intent": "analytics",
         "metric": "delay_rate",
         "dimension": "carrier",
         "time_grain": None,
@@ -203,30 +216,18 @@ async def test_free_router_falls_back_to_known_structured_free_model(monkeypatch
         },
         "sort": "desc",
         "limit": 50,
-        "scope": None,
-        "category": None,
-        "sku": None,
-        "horizon": None,
-        "forecast_method": None,
-        "clarification_question": None,
     }
     attempts = []
 
     async def handler(request):
         body = json.loads(request.content)
         attempts.append(body["model"])
-        content = (
-            json.dumps({"intent": "analytics", "filters": [], "dates": {}})
+        payload = (
+            tool_response("not_a_real_tool", {})
             if len(attempts) == 1
-            else json.dumps(valid)
+            else tool_response("query_logistics_analytics", valid, model=body["model"])
         )
-        return httpx.Response(
-            200,
-            json={
-                "model": body["model"],
-                "choices": [{"message": {"content": content}}],
-            },
-        )
+        return httpx.Response(200, json=payload)
 
     async_client = httpx.AsyncClient
     monkeypatch.setattr(
@@ -237,8 +238,8 @@ async def test_free_router_falls_back_to_known_structured_free_model(monkeypatch
         "Which carrier has the highest delay rate?", model_name="openrouter/free"
     )
     assert plan.metric == "delay_rate"
-    assert attempts == ["openrouter/free", "google/gemma-4-26b-a4b-it:free"]
-    assert model == "google/gemma-4-26b-a4b-it:free"
+    assert attempts == ["openrouter/free", "cohere/north-mini-code:free"]
+    assert model == "cohere/north-mini-code:free"
 
 
 @pytest.mark.asyncio
@@ -359,43 +360,20 @@ def test_ask_routes_an_explicit_forecast_method(monkeypatch):
     assert response.status_code == 200
     assert response.json()["query_plan"]["method"] == "exponential_smoothing"
     assert response.json()["meta"]["method"] == "exponential_smoothing"
+    assert response.json()["meta"]["tool"] == "forecast_demand"
 
 
 @pytest.mark.asyncio
 async def test_interpret_question_can_request_clarification(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test")
-    content = {
-        "intent": "clarification",
-        "metric": None,
-        "dimension": None,
-        "time_grain": None,
-        "filters": {
-            "start_date": None,
-            "end_date": None,
-            "carriers": [],
-            "regions": [],
-            "warehouses": [],
-            "categories": [],
-            "skus": [],
-            "statuses": [],
-        },
-        "sort": "asc",
-        "limit": 50,
-        "scope": None,
-        "category": None,
-        "sku": None,
-        "horizon": None,
-        "forecast_method": None,
-        "clarification_question": "Which carrier or region should I compare?",
-    }
 
     async def handler(request):
         return httpx.Response(
             200,
-            json={
-                "model": "free-test-model",
-                "choices": [{"message": {"content": json.dumps(content)}}],
-            },
+            json=tool_response(
+                "request_clarification",
+                {"question": "Which carrier or region should I compare?"},
+            ),
         )
 
     async_client = httpx.AsyncClient
