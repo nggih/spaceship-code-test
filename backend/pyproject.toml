@@ -1,0 +1,23 @@
+[project]
+name = "logistics-analytics-api"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+  "fastapi>=0.116,<1",
+  "httpx>=0.28,<1",
+  # Cloudflare's current Pyodide index provides the Pydantic 2.10 core wheel.
+  "pydantic>=2.10,<2.11",
+]
+
+[dependency-groups]
+dev = [
+  "pytest==8.4.1",
+  "pytest-asyncio==1.1.0",
+  "uvicorn>=0.35,<1",
+  "workers-py",
+  "workers-runtime-sdk",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

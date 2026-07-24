@@ -1,0 +1,20 @@
+name = "logistics-intelligence-api"
+main = "src/worker.py"
+compatibility_date = "2026-07-24"
+compatibility_flags = ["python_workers"]
+find_additional_modules = true
+base_dir = "src"
+
+[vars]
+ENVIRONMENT = "production"
+OPENROUTER_MODEL = "openrouter/free"
+ALLOWED_ORIGINS = "https://your-project.pages.dev"
+PUBLIC_APP_URL = "https://your-project.pages.dev"
+
+[secrets]
+required = ["OPENROUTER_API_KEY", "TURNSTILE_SECRET_KEY"]
+
+[python_modules]
+excludes = [
+  "**/*.pyc",
+]
