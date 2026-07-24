@@ -25,6 +25,8 @@ const examples = [
   "Show delayed orders by week for the last 3 months",
   "Which carrier has the highest delay rate?",
   "Why are deliveries delayed?",
+  "Predict demand for PAPER-0197 for the next 4 months",
+  "How much inventory should I plan?",
 ];
 const CHAT_KEY = "logistics-ai-conversation-v1";
 const MAX_STORED_MESSAGES = 20;

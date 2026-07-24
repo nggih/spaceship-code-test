@@ -64,6 +64,14 @@ test("supports a multi-turn AI conversation and sends bounded context", async ({
   await page.goto("/");
   await page.getByRole("tab", { name: "Ask AI" }).click();
   await expect(page.getByText(/Ask a question, then refine it naturally/i)).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: "Predict demand for PAPER-0197 for the next 4 months",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "How much inventory should I plan?" }),
+  ).toBeVisible();
   const input = page.getByLabel("Message Logistics AI");
   await input.fill("Why?");
   await page.getByRole("button", { name: "Send message" }).click();
