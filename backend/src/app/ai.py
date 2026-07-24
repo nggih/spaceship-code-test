@@ -21,7 +21,11 @@ You do not calculate results and you never produce SQL.
 Dataset order_date range: {DATA_MIN_DATE} through {DATA_MAX_DATE}.
 Treat {DATA_MAX_DATE} as today for relative dates such as last month.
 Allowed values: {json.dumps(data['filters'])}.
-“Late” means status delayed. Forecasting supports overall or product category only.
+“Late” means status delayed.
+Use intent=diagnostic for questions asking why, drivers, causes, or contributing factors.
+Forecasting supports overall, product category, or SKU. Preserve exact allowed SKU values.
+Use intent=clarification with a concise clarification_question when the requested metric,
+dimension, entity, or time range cannot be inferred safely.
 Return only the requested JSON schema."""
 
 
@@ -57,7 +61,7 @@ async def interpret_question(
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "HTTP-Referer": public_app_url
-        or os.getenv("PUBLIC_APP_URL", "http://localhost:5173"),
+        or os.getenv("PUBLIC_APP_URL", "http://localhost:3000"),
         "X-Title": "Logistics Intelligence",
     }
     last_error: Exception | None = None

@@ -18,3 +18,11 @@ required = ["OPENROUTER_API_KEY", "TURNSTILE_SECRET_KEY"]
 excludes = [
   "**/*.pyc",
 ]
+
+[[ratelimits]]
+name = "AI_RATE_LIMITER"
+namespace_id = "24072501"
+
+  [ratelimits.simple]
+  limit = 5
+  period = 60

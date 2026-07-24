@@ -27,6 +27,7 @@ DIMENSION_FIELDS: dict[str, Callable[[Order], str]] = {
     "category": lambda row: row.product_category,
     "sku": lambda row: row.sku,
     "status": lambda row: row.status,
+    "promo": lambda row: "Promo" if row.is_promo else "No promo",
 }
 
 
@@ -173,7 +174,7 @@ def run_analytics(query: AnalyticsQuery) -> AnalyticsResponse:
     warnings = [
         "“Late” means status=delayed because the dataset has no promised delivery date."
     ]
-    return AnalyticsResponse(
+    response = AnalyticsResponse(
         answer=answer,
         query_plan=query.model_dump(mode="json"),
         chart=ChartSpec(
@@ -194,6 +195,9 @@ def run_analytics(query: AnalyticsQuery) -> AnalyticsResponse:
             warnings=warnings,
         ),
     )
+    response.chart.query_plan = response.query_plan
+    response.chart.explainability = response.explainability.model_dump(mode="json")
+    return response
 
 
 def dashboard_payload(query: AnalyticsQuery) -> dict[str, object]:

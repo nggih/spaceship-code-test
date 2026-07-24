@@ -93,6 +93,7 @@ def metadata() -> dict[str, object]:
             "warehouses": values("warehouse"),
             "categories": values("product_category"),
             "statuses": values("status"),
+            "skus": values("sku"),
         },
         "metrics": [
             "order_count",
@@ -116,5 +117,6 @@ def metadata() -> dict[str, object]:
             "category",
             "sku",
             "status",
+            "promo",
         ],
     }

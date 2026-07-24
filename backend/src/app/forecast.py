@@ -29,11 +29,18 @@ def _linear_regression(values: list[float]) -> tuple[float, float]:
 
 def run_forecast(query: ForecastQuery) -> AnalyticsResponse:
     category = query.category.upper() if query.category else None
-    available = {row.product_category for row in ORDERS}
-    if category and category not in available:
+    sku = query.sku.upper() if query.sku else None
+    available_categories = {row.product_category for row in ORDERS}
+    available_skus = {row.sku for row in ORDERS}
+    if category and category not in available_categories:
         raise ValueError(f"Unknown category: {query.category}")
+    if sku and sku not in available_skus:
+        raise ValueError(f"Unknown SKU: {query.sku}")
     selected = [
-        row for row in ORDERS if not category or row.product_category == category
+        row
+        for row in ORDERS
+        if (not category or row.product_category == category)
+        and (not sku or row.sku == sku)
     ]
     start = date(min(row.order_date.year for row in ORDERS), 1, 1)
     monthly: dict[str, int] = defaultdict(int)
@@ -66,17 +73,23 @@ def run_forecast(query: ForecastQuery) -> AnalyticsResponse:
         }
         for offset, value in enumerate(projections)
     )
-    recommendation = math.ceil(projections[0] * 1.15)
-    label = category or "overall"
+    sparse_sku = query.scope == "sku" and len(selected) < 6
+    safety_stock = 30 if sparse_sku else 15
+    recommendation = math.ceil(projections[0] * (1 + safety_stock / 100))
+    label = sku or category or "overall"
     answer = (
         f"Forecast demand for {label} is {projections[0]:,} units next month. "
-        f"Plan approximately {recommendation:,} units including 15% safety stock."
+        f"Plan approximately {recommendation:,} units including {safety_stock}% safety stock."
     )
     warnings = [
         "Illustrative forecast based on only 12 months and 400 source orders.",
-        "SKU forecasting is unsupported because 313 of 355 SKUs occur only once.",
     ]
-    return AnalyticsResponse(
+    if sparse_sku:
+        warnings.append(
+            f"Low-confidence SKU forecast: {label} has only {len(selected)} source order(s); "
+            "zeros dominate the monthly series, so use this as a conservative planning signal."
+        )
+    response = AnalyticsResponse(
         answer=answer,
         query_plan=query.model_dump(mode="json"),
         chart=ChartSpec(
@@ -97,7 +110,12 @@ def run_forecast(query: ForecastQuery) -> AnalyticsResponse:
             ],
         },
         explainability=Explainability(
-            filters={"scope": query.scope, "category": category, "horizon": query.horizon},
+            filters={
+                "scope": query.scope,
+                "category": category,
+                "sku": sku,
+                "horizon": query.horizon,
+            },
             metric="demand",
             metric_definition="Monthly sum of quantity forecast with an ordinary least-squares linear trend.",
             dimensions=["month", query.scope],
@@ -108,6 +126,11 @@ def run_forecast(query: ForecastQuery) -> AnalyticsResponse:
             "method": "ordinary_least_squares_linear_trend",
             "slope": round(slope, 4),
             "inventory_recommendation": recommendation,
-            "safety_stock_percent": 15,
+            "safety_stock_percent": safety_stock,
+            "supporting_orders": len(selected),
+            "confidence": "low" if sparse_sku else "illustrative",
         },
     )
+    response.chart.query_plan = response.query_plan
+    response.chart.explainability = response.explainability.model_dump(mode="json")
+    return response

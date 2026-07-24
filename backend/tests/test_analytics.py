@@ -6,10 +6,11 @@ from fastapi.testclient import TestClient
 
 from app.analytics import calculate_metric, filter_orders, run_analytics
 from app.data import DATA_MAX_DATE, DATA_MIN_DATE, ORDERS
+from app.diagnostic import run_diagnostic
 from app.embedded_data import CSV_DATA
 from app.forecast import run_forecast
 from app.main import app
-from app.models import AnalyticsQuery, ForecastQuery, QueryFilters
+from app.models import AnalyticsQuery, DiagnosticQuery, ForecastQuery, QueryFilters
 
 client = TestClient(app)
 
@@ -88,11 +89,30 @@ def test_forecast_overall_and_category():
     assert overall.meta["inventory_recommendation"] >= overall.table["rows"][0]["forecast"]
 
 
+def test_sparse_sku_forecast_is_supported_with_low_confidence():
+    sku = ORDERS[0].sku
+    result = run_forecast(ForecastQuery(scope="sku", sku=sku, horizon=2))
+    assert len(result.table["rows"]) == 2
+    assert result.meta["confidence"] == "low"
+    assert result.meta["safety_stock_percent"] == 30
+    assert any("Low-confidence SKU forecast" in warning for warning in result.explainability.warnings)
+
+
 def test_unknown_forecast_category():
     with pytest.raises(ValueError, match="Unknown category"):
         run_forecast(
             ForecastQuery(scope="category", category="NOT_REAL", horizon=2)
         )
+
+
+def test_diagnostic_ranks_delay_associations_and_warns_about_causality():
+    result = run_diagnostic(DiagnosticQuery(minimum_sample=5, limit=6))
+    assert result.chart.type == "horizontal_bar"
+    assert result.table["rows"]
+    lifts = [row["lift_vs_overall"] for row in result.table["rows"]]
+    assert lifts == sorted(lifts, reverse=True)
+    assert any("do not prove causation" in warning for warning in result.explainability.warnings)
+    assert result.chart.query_plan == result.query_plan
 
 
 def test_api_validation_and_health():
@@ -121,3 +141,20 @@ def test_dashboard_payload_endpoint():
     payload = response.json()
     assert payload["kpis"]["order_count"] == 400
     assert set(payload["charts"]) == {"volume", "status", "carriers"}
+    assert payload["charts"]["volume"]["query_plan"]
+    assert payload["charts"]["carriers"]["explainability"]
+
+
+def test_analytics_response_cache_reports_hit():
+    payload = {"metric": "demand", "dimension": "category", "sort": "desc"}
+    first = client.post("/api/analytics", json=payload)
+    second = client.post("/api/analytics", json=payload)
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["meta"]["cache_hit"] is True
+
+
+def test_diagnostics_endpoint():
+    response = client.post("/api/diagnostics", json={"minimum_sample": 5, "limit": 5})
+    assert response.status_code == 200
+    assert len(response.json()["table"]["rows"]) == 5

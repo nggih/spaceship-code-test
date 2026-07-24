@@ -27,6 +27,7 @@ Dimension = Literal[
     "category",
     "sku",
     "status",
+    "promo",
 ]
 TimeGrain = Literal["day", "week", "month"]
 ChartType = Literal["line", "bar", "horizontal_bar", "pie", "table"]
@@ -71,15 +72,23 @@ class AnalyticsQuery(BaseModel):
 class ForecastQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    scope: Literal["overall", "category"] = "overall"
+    scope: Literal["overall", "category", "sku"] = "overall"
     category: str | None = None
+    sku: str | None = None
     horizon: int = Field(default=3, ge=1, le=6)
 
     @model_validator(mode="after")
     def require_category(self) -> "ForecastQuery":
         if self.scope == "category" and not self.category:
             raise ValueError("category is required when scope is category")
+        if self.scope == "sku" and not self.sku:
+            raise ValueError("sku is required when scope is sku")
         if self.scope == "overall":
+            self.category = None
+            self.sku = None
+        elif self.scope == "category":
+            self.sku = None
+        else:
             self.category = None
         return self
 
@@ -87,16 +96,18 @@ class ForecastQuery(BaseModel):
 class AnalysisPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    intent: Literal["analytics", "forecast"]
+    intent: Literal["analytics", "diagnostic", "forecast", "clarification"]
     metric: Metric | None = None
     dimension: Dimension | None = None
     time_grain: TimeGrain | None = None
     filters: QueryFilters = Field(default_factory=QueryFilters)
     sort: Literal["asc", "desc"] = "asc"
     limit: int = Field(default=50, ge=1, le=200)
-    scope: Literal["overall", "category"] | None = None
+    scope: Literal["overall", "category", "sku"] | None = None
     category: str | None = None
+    sku: str | None = None
     horizon: int | None = Field(default=None, ge=1, le=6)
+    clarification_question: str | None = Field(default=None, max_length=300)
 
     @model_validator(mode="after")
     def validate_intent_fields(self) -> "AnalysisPlan":
@@ -107,6 +118,10 @@ class AnalysisPlan(BaseModel):
             self.horizon = self.horizon or 3
             if self.scope == "category" and not self.category:
                 raise ValueError("category is required for category forecasts")
+            if self.scope == "sku" and not self.sku:
+                raise ValueError("sku is required for SKU forecasts")
+        if self.intent == "clarification" and not self.clarification_question:
+            raise ValueError("clarification_question is required for ambiguous requests")
         return self
 
 
@@ -123,6 +138,8 @@ class ChartSpec(BaseModel):
     x_key: str
     y_keys: list[str]
     rows: list[dict[str, Any]]
+    query_plan: dict[str, Any] | None = None
+    explainability: dict[str, Any] | None = None
 
 
 class Explainability(BaseModel):
@@ -135,9 +152,26 @@ class Explainability(BaseModel):
 
 
 class AnalyticsResponse(BaseModel):
+    kind: Literal["result"] = "result"
     answer: str
     query_plan: dict[str, Any]
     chart: ChartSpec
     table: dict[str, Any]
     explainability: Explainability
     meta: dict[str, Any] = Field(default_factory=dict)
+
+
+class ClarificationResponse(BaseModel):
+    kind: Literal["clarification"] = "clarification"
+    message: str
+    suggestions: list[str] = Field(default_factory=list)
+    query_plan: dict[str, Any]
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
+class DiagnosticQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    filters: QueryFilters = Field(default_factory=QueryFilters)
+    minimum_sample: int = Field(default=5, ge=3, le=50)
+    limit: int = Field(default=10, ge=1, le=25)

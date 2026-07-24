@@ -10,7 +10,25 @@ from fastapi import HTTPException
 _requests: dict[str, deque[float]] = defaultdict(deque)
 
 
-def check_rate_limit(client_ip: str, limit: int = 5, window: int = 600) -> None:
+async def check_rate_limit(
+    client_ip: str,
+    binding=None,
+    limit: int = 5,
+    window: int = 600,
+) -> None:
+    if binding is not None:
+        result = await binding.limit({"key": f"ai:{client_ip}"})
+        success = getattr(result, "success", None)
+        if success is None and isinstance(result, dict):
+            success = result.get("success")
+        if not success:
+            raise HTTPException(
+                status_code=429,
+                detail="AI query limit reached. Try again in a minute.",
+            )
+        # The Cloudflare binding provides a distributed burst guard. Continue
+        # through the application window so a warm isolate also enforces the
+        # product policy of five AI questions per ten minutes.
     now = time.monotonic()
     bucket = _requests[client_ip]
     while bucket and bucket[0] <= now - window:
