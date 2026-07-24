@@ -7,6 +7,7 @@ import {
   Database,
   LayoutDashboard,
   LogOut,
+  MessageCircle,
   PackageCheck,
   Sparkles,
   TrendingUp,
@@ -64,6 +65,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+  const [aiFocusRequest, setAiFocusRequest] = useState(0);
 
   useEffect(() => {
     api.me()
@@ -367,7 +369,7 @@ export default function App() {
                 Ask a question.<br /><span className="text-[#8ba39c]">Get a computed, explained answer.</span>
               </h1>
             </div>
-            <AIPanel />
+            <AIPanel focusRequest={aiFocusRequest} />
           </section>
         )}
 
@@ -386,6 +388,27 @@ export default function App() {
           </section>
         )}
       </main>
+      {tab !== "ask" && (
+        <button
+          type="button"
+          aria-label="Open Ask AI assistant"
+          onClick={() => {
+            setAiFocusRequest((value) => value + 1);
+            setTab("ask");
+          }}
+          className="group fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-5 z-40 flex h-14 w-14 items-center justify-center gap-2 rounded-full border border-[#d9ff9f]/30 bg-[#b9f55b] text-[#07110f] shadow-[0_16px_45px_rgba(0,0,0,.45),0_0_28px_rgba(185,245,91,.18)] transition hover:-translate-y-0.5 hover:bg-[#c8ff73] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#edf4f1] focus-visible:ring-offset-4 focus-visible:ring-offset-[#07110f] sm:w-auto sm:px-5"
+        >
+          <span className="relative">
+            <MessageCircle size={20} strokeWidth={2.3} />
+            <Sparkles
+              aria-hidden="true"
+              size={10}
+              className="absolute -right-1.5 -top-1.5"
+            />
+          </span>
+          <span className="hidden text-sm font-semibold sm:inline">Ask AI</span>
+        </button>
+      )}
       <footer className="relative mx-auto max-w-[1480px] px-5 py-10 text-xs text-[#7c8d88] sm:px-8">
         Read-only analytics · Relative dates anchor to 30 Dec 2025 · AI interprets, tools compute
       </footer>

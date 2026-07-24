@@ -83,7 +83,7 @@ function conversationContext(messages: ChatMessage[]): ConversationTurn[] {
   return turns.slice(-MAX_CONTEXT_MESSAGES);
 }
 
-export function AIPanel() {
+export function AIPanel({ focusRequest = 0 }: { focusRequest?: number }) {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([welcomeMessage]);
@@ -117,6 +117,11 @@ export function AIPanel() {
   useEffect(() => {
     endOfThread.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [messages, loading]);
+
+  useEffect(() => {
+    if (!focusRequest) return;
+    window.requestAnimationFrame(() => composer.current?.focus());
+  }, [focusRequest]);
 
   useEffect(() => {
     const input = composer.current;
@@ -495,6 +500,7 @@ export function AIPanel() {
             >
               <div className="flex min-w-0 items-center gap-2 rounded-2xl border border-white/10 bg-[#081310] p-2 focus-within:border-[#b9f55b]/40">
                 <textarea
+                  id="logistics-ai-composer"
                   ref={composer}
                   value={question}
                   onChange={(event) => setQuestion(event.target.value)}

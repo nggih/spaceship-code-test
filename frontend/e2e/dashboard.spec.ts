@@ -122,7 +122,14 @@ test("supports a multi-turn AI conversation and sends bounded context", async ({
     });
   });
   await page.goto("/");
-  await page.getByRole("tab", { name: "Ask AI" }).click();
+  const launcher = page.getByRole("button", { name: "Open Ask AI assistant" });
+  await expect(launcher).toBeVisible();
+  await launcher.click();
+  await expect(page.getByRole("tab", { name: "Ask AI" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(launcher).not.toBeVisible();
   await expect(page.getByText(/Ask a question, then refine it naturally/i)).toBeVisible();
   await expect(page.getByText(/Saved to your account/i)).toBeVisible();
   await expect(
@@ -134,6 +141,7 @@ test("supports a multi-turn AI conversation and sends bounded context", async ({
     page.getByRole("button", { name: "How much inventory should I plan?" }),
   ).toBeVisible();
   const input = page.getByLabel("Message Logistics AI");
+  await expect(input).toBeFocused();
   const initialComposerHeight = await input.evaluate(
     (element) => element.getBoundingClientRect().height,
   );
