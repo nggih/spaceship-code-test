@@ -23,6 +23,17 @@ echarts.use([
 const colors = ["#b9f55b", "#49dcb1", "#f4a261", "#df6f74", "#78a7ff"];
 
 export function Chart({ spec, height = 300 }: { spec: ChartSpec; height?: number }) {
+  if (spec.rows.length === 0) {
+    return (
+      <div
+        className="grid place-items-center rounded-xl border border-dashed border-white/10 text-sm text-[#71837d]"
+        style={{ height }}
+        role="status"
+      >
+        No matching data for this chart.
+      </div>
+    );
+  }
   const labels = spec.rows.map((row) => String(row[spec.x_key] ?? ""));
   const base: EChartsOption = {
     color: colors,

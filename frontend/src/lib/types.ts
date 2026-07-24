@@ -15,23 +15,38 @@ export type ChartSpec = {
   x_key: string;
   y_keys: string[];
   rows: Record<string, string | number | null>[];
+  query_plan?: Record<string, unknown>;
+  explainability?: Explainability;
+};
+
+export type Explainability = {
+  filters: Record<string, unknown>;
+  metric: string;
+  metric_definition: string;
+  dimensions: string[];
+  data_anchor: string;
+  warnings: string[];
 };
 
 export type AnalyticsResult = {
+  kind: "result";
   answer: string;
   query_plan: Record<string, unknown>;
   chart: ChartSpec;
   table: { columns: string[]; rows: Record<string, unknown>[] };
-  explainability: {
-    filters: Record<string, unknown>;
-    metric: string;
-    metric_definition: string;
-    dimensions: string[];
-    data_anchor: string;
-    warnings: string[];
-  };
+  explainability: Explainability;
   meta: Record<string, unknown>;
 };
+
+export type ClarificationResult = {
+  kind: "clarification";
+  message: string;
+  suggestions: string[];
+  query_plan: Record<string, unknown>;
+  meta: Record<string, unknown>;
+};
+
+export type AskResult = AnalyticsResult | ClarificationResult;
 
 export type Metadata = {
   row_count: number;
@@ -42,6 +57,7 @@ export type Metadata = {
     warehouses: string[];
     categories: string[];
     statuses: string[];
+    skus: string[];
   };
 };
 
@@ -58,4 +74,3 @@ export type DashboardData = {
   };
   data_anchor: string;
 };
-

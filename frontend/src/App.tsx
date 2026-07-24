@@ -4,9 +4,11 @@ import { api } from "./lib/api";
 import type { DashboardData, Filters, Metadata } from "./lib/types";
 import { AIPanel } from "./components/AIPanel";
 import { Chart } from "./components/Chart";
+import { ChartExplainability } from "./components/ChartExplainability";
+import { DiagnosticPanel } from "./components/DiagnosticPanel";
 import { FilterBar } from "./components/FilterBar";
 import { ForecastPanel } from "./components/ForecastPanel";
-import { Badge, Card, Skeleton } from "./components/ui";
+import { Badge, Button, Card, Skeleton } from "./components/ui";
 
 const emptyFilters: Filters = {
   start_date: "2025-01-01",
@@ -114,11 +116,18 @@ export default function App() {
           {activeFilterCount > 0 && <p className="mt-3 text-xs text-[#82938e]">{activeFilterCount} operational filters active</p>}
         </section>
 
-        {error && <div role="alert" className="rounded-xl border border-[#df6f74]/25 bg-[#df6f74]/8 p-4 text-sm text-[#f5b1b4]">{error}</div>}
+        {error && (
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#df6f74]/25 bg-[#df6f74]/8 p-4 text-sm text-[#f5b1b4]">
+            <span>{error}</span>
+            <Button variant="secondary" onClick={() => window.location.reload()}>
+              Retry
+            </Button>
+          </div>
+        )}
 
         <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           {kpiConfig.map(({ key, label, icon: Icon, format }) => (
-            <Card key={key} className="min-h-32 p-4 sm:p-5">
+            <Card key={key} data-testid={`kpi-${key}`} className="min-h-32 p-4 sm:p-5">
               {loading || !dashboard ? <Skeleton className="h-20" /> : (
                 <>
                   <div className="flex items-center justify-between text-[#82938e]">
@@ -135,18 +144,33 @@ export default function App() {
         <section className="grid gap-4 lg:grid-cols-[1.45fr_.75fr]">
           <Card className="p-5">
             <div className="mb-3"><h2 className="font-semibold">Order volume</h2><p className="text-xs text-[#71837d]">Distinct orders by month</p></div>
-            {loading || !dashboard ? <Skeleton className="h-[300px]" /> : <Chart spec={dashboard.charts.volume} />}
+            {loading || !dashboard ? <Skeleton className="h-[300px]" /> : (
+              <>
+                <Chart spec={dashboard.charts.volume} />
+                <ChartExplainability spec={dashboard.charts.volume} />
+              </>
+            )}
           </Card>
           <Card className="p-5">
             <div className="mb-3"><h2 className="font-semibold">Delivery status</h2><p className="text-xs text-[#71837d]">Operational outcome mix</p></div>
-            {loading || !dashboard ? <Skeleton className="h-[300px]" /> : <Chart spec={dashboard.charts.status} />}
+            {loading || !dashboard ? <Skeleton className="h-[300px]" /> : (
+              <>
+                <Chart spec={dashboard.charts.status} />
+                <ChartExplainability spec={dashboard.charts.status} />
+              </>
+            )}
           </Card>
         </section>
 
         <section className="grid gap-4 lg:grid-cols-[.9fr_1.1fr]">
           <Card className="p-5">
             <div className="mb-3"><h2 className="font-semibold">Carrier delay rate</h2><p className="text-xs text-[#71837d]">Delayed ÷ completed orders</p></div>
-            {loading || !dashboard ? <Skeleton className="h-[320px]" /> : <Chart spec={dashboard.charts.carriers} height={320} />}
+            {loading || !dashboard ? <Skeleton className="h-[320px]" /> : (
+              <>
+                <Chart spec={dashboard.charts.carriers} height={320} />
+                <ChartExplainability spec={dashboard.charts.carriers} />
+              </>
+            )}
           </Card>
           <Card className="overflow-hidden">
             <div className="border-b border-white/8 p-5">
@@ -170,8 +194,14 @@ export default function App() {
           </Card>
         </section>
 
+        <DiagnosticPanel filters={filters} />
         <AIPanel />
-        {metadata && <ForecastPanel categories={metadata.filters.categories} />}
+        {metadata && (
+          <ForecastPanel
+            categories={metadata.filters.categories}
+            skus={metadata.filters.skus}
+          />
+        )}
       </main>
       <footer className="relative mx-auto max-w-[1480px] px-5 py-10 text-xs text-[#596964] sm:px-8">
         Read-only analytics · Relative dates anchor to 30 Dec 2025 · AI interprets, tools compute
@@ -179,4 +209,3 @@ export default function App() {
     </div>
   );
 }
-

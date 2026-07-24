@@ -5,9 +5,10 @@ import type { AnalyticsResult } from "../lib/types";
 import { Button, Card, Skeleton } from "./ui";
 import { ResultPanel } from "./ResultPanel";
 
-export function ForecastPanel({ categories }: { categories: string[] }) {
-  const [scope, setScope] = useState<"overall" | "category">("overall");
+export function ForecastPanel({ categories, skus }: { categories: string[]; skus: string[] }) {
+  const [scope, setScope] = useState<"overall" | "category" | "sku">("overall");
   const [category, setCategory] = useState(categories[0] || "");
+  const [sku, setSku] = useState(skus[0] || "");
   const [horizon, setHorizon] = useState(3);
   const [result, setResult] = useState<AnalyticsResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -17,7 +18,8 @@ export function ForecastPanel({ categories }: { categories: string[] }) {
     setLoading(true);
     setError("");
     try {
-      setResult(await api.forecast(scope, scope === "category" ? category : null, horizon));
+      const selection = scope === "category" ? category : scope === "sku" ? sku : null;
+      setResult(await api.forecast(scope, selection, horizon));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Forecast failed.");
     } finally {
@@ -25,7 +27,22 @@ export function ForecastPanel({ categories }: { categories: string[] }) {
     }
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    let active = true;
+    api.forecast("overall", null, 3)
+      .then((response) => {
+        if (active) setResult(response);
+      })
+      .catch((caught) => {
+        if (active) setError(caught instanceof Error ? caught.message : "Forecast failed.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <Card className="overflow-hidden">
@@ -43,6 +60,7 @@ export function ForecastPanel({ categories }: { categories: string[] }) {
             <select className="control" value={scope} onChange={(e) => setScope(e.target.value as typeof scope)}>
               <option value="overall">Overall</option>
               <option value="category">Category</option>
+              <option value="sku">SKU</option>
             </select>
           </label>
           {scope === "category" && (
@@ -51,6 +69,21 @@ export function ForecastPanel({ categories }: { categories: string[] }) {
               <select className="control" value={category} onChange={(e) => setCategory(e.target.value)}>
                 {categories.map((value) => <option key={value}>{value}</option>)}
               </select>
+            </label>
+          )}
+          {scope === "sku" && (
+            <label className="grid gap-1 text-xs text-[#82938e]">
+              SKU
+              <input
+                className="control w-44"
+                list="forecast-skus"
+                value={sku}
+                onChange={(event) => setSku(event.target.value.toUpperCase())}
+                placeholder="e.g. PAPER-0197"
+              />
+              <datalist id="forecast-skus">
+                {skus.map((value) => <option key={value} value={value} />)}
+              </datalist>
             </label>
           )}
           <label className="grid gap-1 text-xs text-[#82938e]">
@@ -70,4 +103,3 @@ export function ForecastPanel({ categories }: { categories: string[] }) {
     </Card>
   );
 }
-

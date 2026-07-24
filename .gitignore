@@ -10,6 +10,8 @@ pylock.toml
 node_modules/
 dist/
 coverage/
+playwright-report/
+test-results/
 *.tsbuildinfo
 .DS_Store
 .wrangler/

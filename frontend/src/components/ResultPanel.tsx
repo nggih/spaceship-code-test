@@ -32,6 +32,11 @@ export function ResultPanel({ result }: { result: AnalyticsResult }) {
         <Info size={14} className="mt-0.5 shrink-0" />
         {result.explainability.metric_definition}
       </p>
+      <p className="text-xs text-[#71837d]">
+        Dataset date anchor: {result.explainability.data_anchor}
+        {result.meta.model ? ` · Routed AI model: ${String(result.meta.model)}` : ""}
+        {typeof result.meta.cache_hit === "boolean" ? ` · Cache: ${result.meta.cache_hit ? "hit" : "miss"}` : ""}
+      </p>
       {result.table.rows.length > 0 && (
         <Card className="overflow-hidden">
           <div className="flex items-center gap-2 border-b border-white/8 px-4 py-3 text-sm font-semibold">
@@ -59,4 +64,3 @@ export function ResultPanel({ result }: { result: AnalyticsResult }) {
     </div>
   );
 }
-

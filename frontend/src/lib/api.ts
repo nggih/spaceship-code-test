@@ -1,4 +1,4 @@
-import type { AnalyticsResult, DashboardData, Filters, Metadata } from "./types";
+import type { AnalyticsResult, AskResult, DashboardData, Filters, Metadata } from "./types";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 
@@ -9,7 +9,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.detail || `Request failed (${response.status})`);
+    const detail = payload.detail;
+    const message =
+      typeof detail === "string"
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map((item) => item.msg || "Invalid request").join("; ")
+          : `Request failed (${response.status})`;
+    throw new Error(message);
   }
   return response.json();
 }
@@ -28,15 +35,28 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ metric: "order_count", filters }),
     }),
-  forecast: (scope: "overall" | "category", category: string | null, horizon: number) =>
+  forecast: (
+    scope: "overall" | "category" | "sku",
+    selection: string | null,
+    horizon: number,
+  ) =>
     request<AnalyticsResult>("/api/forecast", {
       method: "POST",
-      body: JSON.stringify({ scope, category, horizon }),
+      body: JSON.stringify({
+        scope,
+        category: scope === "category" ? selection : null,
+        sku: scope === "sku" ? selection : null,
+        horizon,
+      }),
+    }),
+  diagnostics: (filters: Filters) =>
+    request<AnalyticsResult>("/api/diagnostics", {
+      method: "POST",
+      body: JSON.stringify({ filters, minimum_sample: 5, limit: 10 }),
     }),
   ask: (question: string, turnstileToken?: string) =>
-    request<AnalyticsResult>("/api/ask", {
+    request<AskResult>("/api/ask", {
       method: "POST",
       body: JSON.stringify({ question, turnstile_token: turnstileToken }),
     }),
 };
-
