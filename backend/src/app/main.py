@@ -106,10 +106,13 @@ def get_metadata() -> dict[str, object]:
 
 @app.post("/api/dashboard")
 def get_dashboard(query: AnalyticsQuery) -> dict[str, object]:
-    result, _ = dashboard_cache.get_or_set(
-        _cache_key("dashboard", query), lambda: dashboard_payload(query)
-    )
-    return result
+    try:
+        result, _ = dashboard_cache.get_or_set(
+            _cache_key("dashboard", query), lambda: dashboard_payload(query)
+        )
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/analytics", response_model=AnalyticsResponse)
@@ -138,11 +141,14 @@ def forecast(query: ForecastQuery) -> AnalyticsResponse:
 
 @app.post("/api/diagnostics", response_model=AnalyticsResponse)
 def diagnostics(query: DiagnosticQuery) -> AnalyticsResponse:
-    result, hit = diagnostic_cache.get_or_set(
-        _cache_key("diagnostic", query), lambda: run_diagnostic(query)
-    )
-    result.meta["cache_hit"] = hit
-    return result
+    try:
+        result, hit = diagnostic_cache.get_or_set(
+            _cache_key("diagnostic", query), lambda: run_diagnostic(query)
+        )
+        result.meta["cache_hit"] = hit
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post(

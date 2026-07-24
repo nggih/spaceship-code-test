@@ -96,14 +96,32 @@ class ForecastQuery(BaseModel):
 class AnalysisPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    intent: Literal["analytics", "diagnostic", "forecast", "clarification"]
-    metric: Metric | None = None
-    dimension: Dimension | None = None
-    time_grain: TimeGrain | None = None
+    intent: Literal["analytics", "diagnostic", "forecast", "clarification"] = Field(
+        description="Selects exactly one computation path; never contains an answer."
+    )
+    metric: Metric | None = Field(
+        default=None, description="Approved metric required only for analytics."
+    )
+    dimension: Dimension | None = Field(
+        default=None,
+        description="Single approved grouping; time dimensions must match time_grain.",
+    )
+    time_grain: TimeGrain | None = Field(
+        default=None, description="Day, week, or month only for time-series analytics."
+    )
     filters: QueryFilters = Field(default_factory=QueryFilters)
-    sort: Literal["asc", "desc"] = "asc"
-    limit: int = Field(default=50, ge=1, le=200)
-    scope: Literal["overall", "category", "sku"] | None = None
+    sort: Literal["asc", "desc"] = Field(
+        default="asc", description="Ascending for time series; ranking direction otherwise."
+    )
+    limit: int = Field(
+        default=50,
+        ge=1,
+        le=200,
+        description="50 unless the user explicitly requests a bounded top/bottom N.",
+    )
+    scope: Literal["overall", "category", "sku"] | None = Field(
+        default=None, description="Required only for forecasting."
+    )
     category: str | None = None
     sku: str | None = None
     horizon: int | None = Field(default=None, ge=1, le=6)
@@ -113,6 +131,20 @@ class AnalysisPlan(BaseModel):
     def validate_intent_fields(self) -> "AnalysisPlan":
         if self.intent == "analytics" and not self.metric:
             raise ValueError("metric is required for analytics")
+        if self.intent == "analytics":
+            time_dimensions = {"day", "week", "month"}
+            if self.dimension in time_dimensions and self.time_grain != self.dimension:
+                raise ValueError("time dimension and time_grain must match")
+            if (
+                self.dimension not in time_dimensions
+                and self.dimension is not None
+                and self.time_grain is not None
+            ):
+                raise ValueError(
+                    "categorical dimension and time_grain cannot both be populated"
+                )
+            if self.dimension is None and self.time_grain is not None:
+                raise ValueError("time_grain requires the matching time dimension")
         if self.intent == "forecast":
             self.scope = self.scope or "overall"
             self.horizon = self.horizon or 3

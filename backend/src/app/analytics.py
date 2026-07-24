@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import calendar
 from collections import defaultdict
 from datetime import date, timedelta
 from typing import Callable, Iterable
@@ -30,11 +31,32 @@ DIMENSION_FIELDS: dict[str, Callable[[Order], str]] = {
     "promo": lambda row: "Promo" if row.is_promo else "No promo",
 }
 
+FILTER_FIELDS: dict[str, Callable[[Order], str]] = {
+    "carriers": lambda row: row.carrier,
+    "regions": lambda row: row.region,
+    "warehouses": lambda row: row.warehouse,
+    "categories": lambda row: row.product_category,
+    "skus": lambda row: row.sku,
+    "statuses": lambda row: row.status,
+}
+
 
 def filter_orders(query: AnalyticsQuery, rows: Iterable[Order] = ORDERS) -> list[Order]:
     filters = query.filters
+    source = list(rows)
+    for field, getter in FILTER_FIELDS.items():
+        requested = set(getattr(filters, field))
+        if not requested:
+            continue
+        allowed = {getter(row) for row in source}
+        unknown = requested - allowed
+        if unknown:
+            raise ValueError(
+                f"Unknown {field}: {', '.join(sorted(unknown))}. "
+                "Use values returned by /api/metadata."
+            )
     result = []
-    for row in rows:
+    for row in source:
         if filters.start_date and row.order_date < filters.start_date:
             continue
         if filters.end_date and row.order_date > filters.end_date:
@@ -134,6 +156,91 @@ def _format_value(metric: str, value: float) -> str:
     return f"{int(value):,}"
 
 
+def _format_date(value: date, include_year: bool = True) -> str:
+    return f"{value.day} {value.strftime('%b')}" + (f" {value.year}" if include_year else "")
+
+
+def _date_context(query: AnalyticsQuery) -> str:
+    start = query.filters.start_date
+    end = query.filters.end_date
+    if not start and not end:
+        return ""
+    effective_start = start or min(row.order_date for row in ORDERS)
+    effective_end = end or DATA_MAX_DATE
+    if (
+        effective_start.day == 1
+        and effective_start.year == effective_end.year
+        and effective_start.month == effective_end.month
+        and effective_end.day
+        == calendar.monthrange(effective_end.year, effective_end.month)[1]
+    ):
+        return f" in {effective_start.strftime('%B %Y')}"
+    if effective_start == effective_end:
+        return f" on {_format_date(effective_start)}"
+    start_label = _format_date(
+        effective_start, include_year=effective_start.year != effective_end.year
+    )
+    return f" from {start_label}–{_format_date(effective_end)}"
+
+
+def _answer_for(
+    query: AnalyticsQuery,
+    total: float,
+    filtered: list[Order],
+    dimension: str | None,
+    rows: list[dict[str, str | float]],
+) -> str:
+    period = _date_context(query)
+    count_labels = {
+        "order_count": "order",
+        "delivered_orders": "delivered order",
+        "delayed_orders": "delayed order",
+    }
+    if query.metric in count_labels:
+        amount = int(total)
+        noun = count_labels[query.metric] + ("" if amount == 1 else "s")
+        answer = f"There {'was' if amount == 1 else 'were'} {amount:,} {noun}{period}."
+    elif query.metric == "demand":
+        answer = f"Total demand was {int(total):,} units{period}."
+    elif query.metric == "revenue":
+        answer = f"Revenue totaled ${total:,.2f}{period}."
+    elif query.metric == "average_delivery_time":
+        completed = sum(
+            row.status in {"delivered", "delayed"} and row.delivery_date is not None
+            for row in filtered
+        )
+        answer = (
+            f"Average delivery time was {total:.1f} days{period}, "
+            f"based on {completed:,} completed orders."
+        )
+    else:
+        completed = sum(row.status in {"delivered", "delayed"} for row in filtered)
+        label = "On-time rate" if query.metric == "on_time_rate" else "Delay rate"
+        answer = f"{label} was {total:.1f}%{period} across {completed:,} completed orders."
+
+    if dimension in {"day", "week", "month"} and rows:
+        unit = dimension + ("" if len(rows) == 1 else "s")
+        answer += f" The chart breaks this into {len(rows)} {unit}."
+    elif dimension and rows:
+        direction = "highest" if query.sort == "desc" else "lowest"
+        metric_label = {
+            "order_count": "order count",
+            "delivered_orders": "delivered-order count",
+            "delayed_orders": "delayed-order count",
+            "on_time_rate": "on-time rate",
+            "average_delivery_time": "average delivery time",
+            "demand": "demand",
+            "revenue": "revenue",
+            "delay_rate": "delay rate",
+        }[query.metric]
+        answer += (
+            f" {rows[0]['label']} had the {direction} {metric_label} among "
+            f"{dimension.replace('_', ' ')} groups "
+            f"at {_format_value(query.metric, float(rows[0]['value']))}."
+        )
+    return answer
+
+
 def run_analytics(query: AnalyticsQuery) -> AnalyticsResponse:
     filtered = filter_orders(query)
     dimension = query.time_grain or query.dimension
@@ -165,9 +272,7 @@ def run_analytics(query: AnalyticsQuery) -> AnalyticsResponse:
     elif dimension:
         chart_type = "horizontal_bar" if len(rows) > 5 else "bar"
 
-    answer = f"{_format_value(query.metric, total)} across {len(filtered):,} matching orders."
-    if dimension and rows and query.sort == "desc":
-        answer += f" The leading {dimension} is {rows[0]['label']} at {_format_value(query.metric, rows[0]['value'])}."
+    answer = _answer_for(query, total, filtered, dimension, rows)
 
     filter_dump = query.filters.model_dump(mode="json", exclude_none=True)
     filter_dump = {key: value for key, value in filter_dump.items() if value not in ([], None)}

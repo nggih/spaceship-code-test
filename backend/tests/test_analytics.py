@@ -75,7 +75,40 @@ def test_carrier_delay_rate_ranking():
     )
     values = [row["value"] for row in result.chart.rows]
     assert values == sorted(values, reverse=True)
-    assert "leading carrier" in result.answer.lower()
+    assert "highest delay rate among carrier groups" in result.answer.lower()
+    assert "completed orders" in result.answer.lower()
+
+
+def test_business_answer_names_metric_period_and_grain():
+    result = run_analytics(
+        AnalyticsQuery(
+            metric="delayed_orders",
+            dimension="week",
+            filters=QueryFilters(
+                start_date=date(2025, 9, 30),
+                end_date=date(2025, 12, 30),
+                statuses=["delayed"],
+            ),
+        )
+    )
+    assert result.answer.startswith(
+        "There were 10 delayed orders from 30 Sep–30 Dec 2025."
+    )
+    assert "breaks this into 14 weeks" in result.answer
+
+
+def test_business_answer_recognizes_full_calendar_month():
+    result = run_analytics(
+        AnalyticsQuery(
+            metric="delayed_orders",
+            filters=QueryFilters(
+                start_date=date(2025, 11, 1),
+                end_date=date(2025, 11, 30),
+                statuses=["delayed"],
+            ),
+        )
+    )
+    assert result.answer == "There were 4 delayed orders in November 2025."
 
 
 def test_forecast_overall_and_category():
@@ -133,6 +166,13 @@ def test_api_validation_and_health():
         },
     )
     assert invalid_dates.status_code == 422
+
+    unknown_filter = client.post(
+        "/api/analytics",
+        json={"metric": "order_count", "filters": {"carriers": ["NOT_A_CARRIER"]}},
+    )
+    assert unknown_filter.status_code == 400
+    assert "Unknown carriers" in unknown_filter.json()["detail"]
 
 
 def test_dashboard_payload_endpoint():

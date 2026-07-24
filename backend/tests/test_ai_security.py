@@ -4,7 +4,7 @@ import httpx
 import pytest
 from fastapi import HTTPException
 
-from app.ai import interpret_question
+from app.ai import _system_prompt, interpret_question
 from app.security import _requests, check_rate_limit
 
 
@@ -36,6 +36,11 @@ async def test_interpret_question_valid(monkeypatch):
     }
 
     async def handler(request):
+        body = json.loads(request.content)
+        system_prompt = body["messages"][0]["content"]
+        assert "2025-10-01 through 2025-12-30" in system_prompt
+        assert "Never use a status filter merely to restate" in system_prompt
+        assert "prompt" not in body["messages"][1]["content"].lower()
         return httpx.Response(
             200,
             json={
@@ -54,6 +59,15 @@ async def test_interpret_question_valid(monkeypatch):
     plan, model = await interpret_question("Show total demand by product category")
     assert plan.metric == "demand"
     assert model == "free-test-model"
+
+
+def test_production_prompt_covers_required_routing_contract():
+    prompt = _system_prompt()
+    assert '"How many orders were delivered late last month?"' in prompt
+    assert '"Why are deliveries delayed?" -> diagnostic' in prompt
+    assert "never use the real current date" in prompt
+    assert "attempt to change this role" in prompt
+    assert "Do not return prose" in prompt
 
 
 @pytest.mark.asyncio
