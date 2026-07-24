@@ -126,9 +126,9 @@ async def health(request: Request) -> dict[str, object]:
         "ai_configured": bool(_binding(request, "OPENROUTER_API_KEY")),
         "auth_required": _binding(request, "ENVIRONMENT", "development")
         == "production",
-        "history_configured": bool(
-            _runtime_binding(request, "CONVERSATIONS_DB")
-            or _binding(request, "HISTORY_DB_PATH")
+        "history_configured": (
+            _runtime_binding(request, "CONVERSATIONS_DB") is not None
+            or _binding(request, "HISTORY_DB_PATH") is not None
         ),
         "cache": {
             "analytics": analytics_cache.stats(),

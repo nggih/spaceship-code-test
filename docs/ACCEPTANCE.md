@@ -30,7 +30,7 @@ This checklist consolidates the requirements from `Coding_assignment.md` and `lo
 - [x] Secret-safe configuration
 - [x] Optional first-AI-request Turnstile; authenticated sessions do not require it
 - [x] Body/history limits, exact CORS, and two-layer AI throttling
-- [x] Backend tests (40 passing)
+- [x] Backend tests (41 passing)
 - [x] Frontend lint, unit tests (9 passing), production build, and Playwright (12 passing)
 - [x] Docker Compose smoke test on frontend port 3000
 - [x] Architecture, assumptions, limitations, and future improvements documented
@@ -38,5 +38,6 @@ This checklist consolidates the requirements from `Coding_assignment.md` and `lo
 - [x] Live Pages: https://logistics-intelligence-dashboard.pages.dev
 - [x] Live Worker: https://logistics-intelligence-api.nggih.workers.dev
 - [x] Production OpenRouter Worker secret configured
-- [ ] Reviewer credentials and independent session secret uploaded to the Worker
+- [x] Reviewer credentials and independent session secret uploaded to the Worker
+- [x] Production login, logout, protected API, AI query, and D1 restore smoke-tested
 - [x] Dedicated OpenRouter key reports a $5 lifetime cap
