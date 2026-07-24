@@ -124,6 +124,7 @@ test("supports a multi-turn AI conversation and sends bounded context", async ({
   await page.goto("/");
   await page.getByRole("tab", { name: "Ask AI" }).click();
   await expect(page.getByText(/Ask a question, then refine it naturally/i)).toBeVisible();
+  await expect(page.getByText(/Saved to your account/i)).toBeVisible();
   await expect(
     page.getByRole("button", {
       name: "Predict demand for PAPER-0197 for the next 4 months",
@@ -133,6 +134,37 @@ test("supports a multi-turn AI conversation and sends bounded context", async ({
     page.getByRole("button", { name: "How much inventory should I plan?" }),
   ).toBeVisible();
   const input = page.getByLabel("Message Logistics AI");
+  const initialComposerHeight = await input.evaluate(
+    (element) => element.getBoundingClientRect().height,
+  );
+  await input.fill("First line\nSecond line\nThird line");
+  await expect
+    .poll(() =>
+      input.evaluate((element) => element.getBoundingClientRect().height),
+    )
+    .toBeGreaterThan(initialComposerHeight);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document.documentElement.scrollWidth -
+          document.documentElement.clientWidth,
+      ),
+    )
+    .toBeLessThanOrEqual(1);
+  const panelBottomGap = await page
+    .getByRole("log", { name: "Logistics AI conversation" })
+    .evaluate((log) => {
+      const panel = log.closest(".overflow-hidden");
+      const composerContainer = log.parentElement?.querySelector("form")?.parentElement;
+      if (!panel || !composerContainer) return Number.POSITIVE_INFINITY;
+      return (
+        panel.getBoundingClientRect().bottom -
+        composerContainer.getBoundingClientRect().bottom
+      );
+    });
+  expect(panelBottomGap).toBeLessThanOrEqual(2);
+
   await input.fill("Why?");
   await page.getByRole("button", { name: "Send message" }).click();
   await expect(page.getByText("Which carrier or region should I compare?")).toBeVisible();

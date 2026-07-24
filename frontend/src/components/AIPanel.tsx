@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowUp,
   Bot,
   Check,
   History,
   MessageSquarePlus,
   Pencil,
+  Send,
   Sparkles,
   Trash2,
   User,
@@ -117,6 +117,14 @@ export function AIPanel() {
   useEffect(() => {
     endOfThread.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [messages, loading]);
+
+  useEffect(() => {
+    const input = composer.current;
+    if (!input) return;
+    input.style.height = "auto";
+    input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
+    input.style.overflowY = input.scrollHeight > 160 ? "auto" : "hidden";
+  }, [question]);
 
   function choosePrompt(prompt: string) {
     setQuestion(prompt);
@@ -230,10 +238,13 @@ export function AIPanel() {
     }
   }
 
+  const onlyWelcome =
+    !loading && messages.length === 1 && messages[0].id === "welcome";
+
   return (
     <Card className="overflow-hidden">
-      <div className="grid lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="border-b border-white/8 bg-[#091411] lg:min-h-[720px] lg:border-b-0 lg:border-r">
+      <div className="grid min-w-0 lg:grid-cols-[280px_minmax(0,1fr)]">
+        <aside className="min-w-0 border-b border-white/8 bg-[#091411] lg:min-h-[720px] lg:border-b-0 lg:border-r">
           <div className="flex items-center justify-between border-b border-white/8 p-4">
             <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-[#9fb0aa]">
               <History size={15} /> History
@@ -259,11 +270,11 @@ export function AIPanel() {
                 Your saved conversations will appear here.
               </p>
             ) : (
-              <ul className="grid gap-1">
+              <ul className="grid min-w-0 gap-1">
                 {conversations.map((conversation) => (
                   <li
                     key={conversation.id}
-                    className={`group rounded-xl border ${
+                    className={`group min-w-0 rounded-xl border ${
                       activeId === conversation.id
                         ? "border-[#b9f55b]/25 bg-[#b9f55b]/8"
                         : "border-transparent hover:bg-white/[.035]"
@@ -302,7 +313,7 @@ export function AIPanel() {
                         </button>
                       </form>
                     ) : (
-                      <div className="flex items-center gap-1 p-1">
+                      <div className="flex min-w-0 items-center gap-1 p-1">
                         <button
                           type="button"
                           aria-label={`Open ${conversation.title}`}
@@ -353,30 +364,26 @@ export function AIPanel() {
           </div>
         </aside>
 
-        <div className="min-w-0">
-          <div className="border-b border-white/8 p-5 sm:p-6">
-            <div className="mb-2 flex items-center gap-2 text-[#d9ff9f]">
-              <Sparkles size={17} />
-              <span className="text-xs font-semibold uppercase tracking-[.18em]">
-                Logistics conversation
-              </span>
-            </div>
-            <h2 className="text-xl font-semibold tracking-tight">
-              Ask, inspect, then follow up.
-            </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-[#93a49e]">
-              Conversations are saved to your account. AI interprets context; validated
-              Python tools calculate every answer.
-            </p>
+        <div className="flex min-w-0 flex-col">
+          <div className="flex items-center gap-2 border-b border-white/8 p-4 text-xs font-semibold uppercase tracking-[.16em] text-[#9fb0aa]">
+            <Sparkles size={15} className="text-[#d9ff9f]" />
+            Logistics AI
+            <span className="ml-auto hidden font-normal normal-case tracking-normal text-[#7f918b] sm:block">
+              Validated Python tools compute every answer
+            </span>
           </div>
 
           <div
             role="log"
             aria-label="Logistics AI conversation"
             aria-live="polite"
-            className="max-h-[72vh] min-h-[440px] overflow-y-auto bg-[#091411]/50 px-4 py-6 sm:px-6"
+            className="flex max-h-[64vh] min-h-[320px] min-w-0 flex-col overflow-y-auto bg-[#091411]/50 px-4 py-6 sm:px-6 lg:max-h-none lg:min-h-0 lg:flex-1"
           >
-            <div className="mx-auto grid max-w-5xl gap-6">
+            <div
+              className={`mx-auto w-full max-w-5xl gap-6 ${
+                onlyWelcome ? "flex flex-1 flex-col justify-center" : "grid"
+              }`}
+            >
               {messages.map((message) =>
                 message.role === "user" ? (
                   <div key={message.id} className="flex justify-end gap-3">
@@ -486,7 +493,7 @@ export function AIPanel() {
                 void submit();
               }}
             >
-              <div className="flex items-end gap-3 rounded-2xl border border-white/10 bg-[#081310] p-2 focus-within:border-[#b9f55b]/40">
+              <div className="flex min-w-0 items-center gap-2 rounded-2xl border border-white/10 bg-[#081310] p-2 focus-within:border-[#b9f55b]/40">
                 <textarea
                   ref={composer}
                   value={question}
@@ -497,23 +504,23 @@ export function AIPanel() {
                       void submit();
                     }
                   }}
-                  rows={2}
+                  rows={1}
                   maxLength={500}
                   aria-label="Message Logistics AI"
-                  className="min-h-14 flex-1 resize-none bg-transparent px-3 py-2 text-sm leading-6 text-white outline-none placeholder:text-[#7c8d88]"
+                  className="max-h-40 min-h-11 min-w-0 flex-1 resize-none self-center overflow-y-hidden bg-transparent px-3 py-2.5 text-sm leading-6 text-white outline-none placeholder:text-[#7c8d88]"
                   placeholder="Ask a question or continue the conversation…"
                 />
                 <Button
                   type="submit"
                   disabled={loading || !question.trim()}
-                  className="h-11 w-11 rounded-xl p-0"
+                  className="h-11 w-11 shrink-0 rounded-xl p-0"
                   aria-label="Send message"
                 >
-                  <ArrowUp size={18} />
+                  <Send size={17} />
                 </Button>
               </div>
               <div className="mt-2 flex items-center justify-between gap-2 px-1 text-[11px] text-[#7f918b]">
-                <span>Saved history · Enter to send · Shift+Enter for a new line</span>
+                <span>Saved to your account · Enter to send · Shift+Enter for a new line</span>
                 <span>{question.length}/500</span>
               </div>
             </form>

@@ -213,7 +213,7 @@ export default function App() {
         <nav
           role="tablist"
           aria-label="Sections"
-          className="mx-auto flex max-w-[1480px] gap-1 px-5 sm:px-8"
+          className="mx-auto grid max-w-[1480px] grid-cols-4 gap-1 px-5 sm:flex sm:px-8"
         >
           {tabs.map(({ id, label, icon: Icon }) => (
             <button
@@ -221,7 +221,7 @@ export default function App() {
               role="tab"
               aria-selected={tab === id}
               onClick={() => setTab(id)}
-              className={`flex items-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition ${
+              className={`flex min-w-0 items-center justify-center gap-1 border-b-2 px-1 py-3 text-xs font-medium transition sm:gap-2 sm:px-3 sm:text-sm ${
                 tab === id
                   ? "border-[#b9f55b] text-white"
                   : "border-transparent text-[#93a49e] hover:text-white"
