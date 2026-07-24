@@ -11,7 +11,35 @@ from .data import DATA_MAX_DATE, DATA_MIN_DATE, metadata
 from .models import AnalysisPlan
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-DEFAULT_MODEL = "google/gemma-4-26b-a4b-it:free"
+DEFAULT_MODEL = "openrouter/free"
+FREE_FALLBACK_MODEL = "google/gemma-4-26b-a4b-it:free"
+
+
+def _strict_analysis_schema() -> dict[str, object]:
+    """Inline Pydantic refs and require every nullable field for provider portability."""
+    source = AnalysisPlan.model_json_schema()
+    definitions = source.get("$defs", {})
+
+    def normalize(node):
+        if isinstance(node, list):
+            return [normalize(item) for item in node]
+        if not isinstance(node, dict):
+            return node
+        if "$ref" in node:
+            name = node["$ref"].rsplit("/", 1)[-1]
+            return normalize(definitions[name])
+        result = {
+            key: normalize(value)
+            for key, value in node.items()
+            if key not in {"$defs", "default", "title"}
+        }
+        if result.get("type") == "object":
+            properties = result.get("properties", {})
+            result["required"] = list(properties)
+            result["additionalProperties"] = False
+        return result
+
+    return normalize(source)
 
 
 def _system_prompt() -> str:
@@ -93,9 +121,10 @@ async def interpret_question(
     api_key = api_key or os.getenv("OPENROUTER_API_KEY")
     if not api_key:
         raise HTTPException(status_code=503, detail="AI interpretation is not configured.")
-    schema = AnalysisPlan.model_json_schema()
+    schema = _strict_analysis_schema()
+    requested_model = model_name or os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL)
     request_body = {
-        "model": model_name or os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL),
+        "model": requested_model,
         "messages": [
             {"role": "system", "content": _system_prompt()},
             {"role": "user", "content": question},
@@ -120,7 +149,14 @@ async def interpret_question(
         "X-Title": "Logistics Intelligence",
     }
     last_error: Exception | None = None
-    for attempt in range(3):
+    capacity_error = False
+    candidates = (
+        [requested_model, FREE_FALLBACK_MODEL, FREE_FALLBACK_MODEL]
+        if requested_model == "openrouter/free"
+        else [requested_model, requested_model, requested_model]
+    )
+    for attempt, candidate in enumerate(candidates):
+        request_body["model"] = candidate
         if attempt:
             request_body["messages"] = [
                 request_body["messages"][0],
@@ -148,10 +184,9 @@ async def interpret_question(
             ) from exc
 
         if response.status_code in {402, 429}:
-            raise HTTPException(
-                status_code=503,
-                detail="Free AI capacity is currently unavailable. Please try again later.",
-            )
+            capacity_error = True
+            last_error = ValueError(f"OpenRouter capacity status {response.status_code}")
+            continue
         if response.status_code >= 400:
             last_error = ValueError(f"OpenRouter status {response.status_code}")
             continue
@@ -159,12 +194,17 @@ async def interpret_question(
             payload = response.json()
             content = payload["choices"][0]["message"]["content"]
             plan = AnalysisPlan.model_validate_json(content)
-            return plan, payload.get("model", request_body["model"])
+            return plan, payload.get("model", candidate)
         except (ValueError, KeyError, IndexError, ValidationError) as exc:
             last_error = exc
 
     if isinstance(last_error, httpx.TimeoutException):
         raise HTTPException(status_code=503, detail="The free AI model timed out.")
+    if capacity_error and isinstance(last_error, ValueError) and "capacity" in str(last_error):
+        raise HTTPException(
+            status_code=503,
+            detail="Free AI capacity is currently unavailable. Please try again later.",
+        )
     raise HTTPException(
         status_code=502, detail="The AI returned an invalid analytical plan."
     ) from last_error

@@ -4,7 +4,7 @@ import httpx
 import pytest
 from fastapi import HTTPException
 
-from app.ai import _system_prompt, interpret_question
+from app.ai import _strict_analysis_schema, _system_prompt, interpret_question
 from app.security import _requests, check_rate_limit
 
 
@@ -70,6 +70,16 @@ def test_production_prompt_covers_required_routing_contract():
     assert "Do not return prose" in prompt
 
 
+def test_structured_output_schema_is_inlined_and_fully_required():
+    schema = _strict_analysis_schema()
+    encoded = json.dumps(schema)
+    assert "$ref" not in encoded
+    assert "$defs" not in encoded
+    assert set(schema["required"]) == set(schema["properties"])
+    filters = schema["properties"]["filters"]
+    assert set(filters["required"]) == set(filters["properties"])
+
+
 @pytest.mark.asyncio
 async def test_interpret_question_rejects_malformed(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test")
@@ -89,6 +99,65 @@ async def test_interpret_question_rejects_malformed(monkeypatch):
     with pytest.raises(HTTPException) as error:
         await interpret_question("What happened?")
     assert error.value.status_code == 502
+
+
+@pytest.mark.asyncio
+async def test_free_router_falls_back_to_known_structured_free_model(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test")
+    valid = {
+        "intent": "analytics",
+        "metric": "delay_rate",
+        "dimension": "carrier",
+        "time_grain": None,
+        "filters": {
+            "start_date": None,
+            "end_date": None,
+            "carriers": [],
+            "regions": [],
+            "warehouses": [],
+            "categories": [],
+            "skus": [],
+            "statuses": [],
+        },
+        "sort": "desc",
+        "limit": 50,
+        "scope": None,
+        "category": None,
+        "sku": None,
+        "horizon": None,
+        "clarification_question": None,
+    }
+    attempts = []
+
+    async def handler(request):
+        body = json.loads(request.content)
+        attempts.append(body["model"])
+        content = (
+            json.dumps({"intent": "analytics", "filters": [], "dates": {}})
+            if len(attempts) == 1
+            else json.dumps(valid)
+        )
+        return httpx.Response(
+            200,
+            json={
+                "model": body["model"],
+                "choices": [{"message": {"content": content}}],
+            },
+        )
+
+    async_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        "app.ai.httpx.AsyncClient",
+        lambda **kwargs: async_client(
+            transport=httpx.MockTransport(handler), **kwargs
+        ),
+    )
+    plan, model = await interpret_question(
+        "Which carrier has the highest delay rate?", model_name="openrouter/free"
+    )
+    assert plan.metric == "delay_rate"
+    assert attempts == ["openrouter/free", "google/gemma-4-26b-a4b-it:free"]
+    assert model == "google/gemma-4-26b-a4b-it:free"
 
 
 @pytest.mark.asyncio
