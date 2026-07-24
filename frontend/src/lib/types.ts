@@ -48,6 +48,11 @@ export type ClarificationResult = {
 
 export type AskResult = AnalyticsResult | ClarificationResult;
 
+export type ConversationTurn = {
+  role: "user" | "assistant";
+  content: string;
+};
+
 export type Metadata = {
   row_count: number;
   date_range: { min: string; max: string };

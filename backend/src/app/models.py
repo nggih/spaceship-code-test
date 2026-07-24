@@ -157,11 +157,31 @@ class AnalysisPlan(BaseModel):
         return self
 
 
+class ConversationTurn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=500)
+
+
 class AskRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     question: str = Field(min_length=3, max_length=500)
     turnstile_token: str | None = Field(default=None, max_length=4096)
+    history: list[ConversationTurn] = Field(default_factory=list, max_length=8)
+
+    @model_validator(mode="after")
+    def validate_history_order(self) -> "AskRequest":
+        for index, turn in enumerate(self.history):
+            expected = "user" if index % 2 == 0 else "assistant"
+            if turn.role != expected:
+                raise ValueError(
+                    "history must contain complete alternating user/assistant turns"
+                )
+        if self.history and self.history[-1].role != "assistant":
+            raise ValueError("history must end with an assistant turn")
+        return self
 
 
 class ChartSpec(BaseModel):

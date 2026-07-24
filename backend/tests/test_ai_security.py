@@ -3,9 +3,17 @@ import json
 import httpx
 import pytest
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
 from app.ai import _strict_analysis_schema, _system_prompt, interpret_question
-from app.security import _requests, check_rate_limit
+from app.main import app
+from app.models import AnalysisPlan, ConversationTurn
+from app.security import (
+    _requests,
+    check_rate_limit,
+    create_ai_session,
+    verify_ai_session,
+)
 
 
 @pytest.mark.asyncio
@@ -59,6 +67,81 @@ async def test_interpret_question_valid(monkeypatch):
     plan, model = await interpret_question("Show total demand by product category")
     assert plan.metric == "demand"
     assert model == "free-test-model"
+
+
+@pytest.mark.asyncio
+async def test_interpret_question_includes_bounded_conversation_context(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test")
+    content = {
+        "intent": "analytics",
+        "metric": "delay_rate",
+        "dimension": "region",
+        "time_grain": None,
+        "filters": {
+            "start_date": None,
+            "end_date": None,
+            "carriers": [],
+            "regions": [],
+            "warehouses": [],
+            "categories": [],
+            "skus": [],
+            "statuses": [],
+        },
+        "sort": "desc",
+        "limit": 50,
+        "scope": None,
+        "category": None,
+        "sku": None,
+        "horizon": None,
+        "clarification_question": None,
+    }
+
+    async def handler(request):
+        body = json.loads(request.content)
+        messages = body["messages"]
+        assert [message["role"] for message in messages] == [
+            "system",
+            "system",
+            "user",
+            "assistant",
+            "user",
+        ]
+        assert messages[-3]["content"] == "Which carrier has the highest delay rate?"
+        assert messages[-2]["content"].startswith("Delay rate was")
+        assert messages[-1]["content"] == "Now compare that by region"
+        return httpx.Response(
+            200,
+            json={
+                "model": "free-test-model",
+                "choices": [{"message": {"content": json.dumps(content)}}],
+            },
+        )
+
+    async_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        "app.ai.httpx.AsyncClient",
+        lambda **kwargs: async_client(
+            transport=httpx.MockTransport(handler), **kwargs
+        ),
+    )
+    plan, _ = await interpret_question(
+        "Now compare that by region",
+        history=[
+            ConversationTurn(
+                role="user",
+                content="Which carrier has the highest delay rate?",
+            ),
+            ConversationTurn(
+                role="assistant",
+                content=(
+                    "Delay rate was 15.3%. GLS had the highest delay rate "
+                    "among carrier groups at 28.6%."
+                ),
+            ),
+        ],
+    )
+    assert plan.metric == "delay_rate"
+    assert plan.dimension == "region"
 
 
 def test_production_prompt_covers_required_routing_contract():
@@ -195,6 +278,69 @@ async def test_cloudflare_binding_still_enforces_ten_minute_app_window():
     with pytest.raises(HTTPException) as error:
         await check_rate_limit("198.51.100.9", binding=Binding())
     assert error.value.status_code == 429
+
+
+def test_ai_session_is_signed_expiring_and_ip_bound():
+    token = create_ai_session("203.0.113.8", "test-signing-secret", now=1_000)
+    assert verify_ai_session(
+        token, "203.0.113.8", "test-signing-secret", now=1_001
+    )
+    assert not verify_ai_session(
+        token, "203.0.113.9", "test-signing-secret", now=1_001
+    )
+    assert not verify_ai_session(
+        token, "203.0.113.8", "wrong-secret", now=1_001
+    )
+    assert not verify_ai_session(
+        token, "203.0.113.8", "test-signing-secret", now=4_601
+    )
+
+
+def test_ask_reuses_ai_session_without_second_turnstile(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("TURNSTILE_SECRET_KEY", "turnstile-test")
+    monkeypatch.setenv("AI_SESSION_SECRET", "session-test-secret")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test")
+    verifications = []
+
+    async def fake_turnstile(token, client_ip, secret=None, environment=None):
+        verifications.append((token, client_ip))
+
+    async def fake_interpret(*args, **kwargs):
+        return (
+            AnalysisPlan(
+                intent="analytics",
+                metric="order_count",
+                dimension=None,
+                time_grain=None,
+            ),
+            "test-model",
+        )
+
+    monkeypatch.setattr("app.main.verify_turnstile", fake_turnstile)
+    monkeypatch.setattr("app.main.interpret_question", fake_interpret)
+    _requests.clear()
+    client = TestClient(app)
+    first = client.post(
+        "/api/ask",
+        json={"question": "How many total orders?", "turnstile_token": "first-token"},
+    )
+    assert first.status_code == 200
+    session = first.headers["X-AI-Session"]
+
+    second = client.post(
+        "/api/ask",
+        headers={"X-AI-Session": session},
+        json={
+            "question": "Now show that by region",
+            "history": [
+                {"role": "user", "content": "How many total orders?"},
+                {"role": "assistant", "content": first.json()["answer"]},
+            ],
+        },
+    )
+    assert second.status_code == 200
+    assert len(verifications) == 1
 
 
 @pytest.mark.asyncio

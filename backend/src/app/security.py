@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import os
 import time
 from collections import defaultdict, deque
@@ -8,6 +11,53 @@ import httpx
 from fastapi import HTTPException
 
 _requests: dict[str, deque[float]] = defaultdict(deque)
+AI_SESSION_TTL_SECONDS = 60 * 60
+
+
+def _encode(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+
+
+def _decode(value: str) -> bytes:
+    return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+
+
+def create_ai_session(client_ip: str, secret: str, now: int | None = None) -> str:
+    issued_at = int(time.time() if now is None else now)
+    ip_digest = hashlib.sha256(client_ip.encode("utf-8")).hexdigest()[:20]
+    payload = f"{issued_at}:{ip_digest}".encode("utf-8")
+    signature = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).digest()
+    return f"{_encode(payload)}.{_encode(signature)}"
+
+
+def verify_ai_session(
+    token: str | None,
+    client_ip: str,
+    secret: str | None,
+    now: int | None = None,
+) -> bool:
+    if not token or not secret:
+        return False
+    try:
+        encoded_payload, encoded_signature = token.split(".", 1)
+        payload = _decode(encoded_payload)
+        provided_signature = _decode(encoded_signature)
+        expected_signature = hmac.new(
+            secret.encode("utf-8"), payload, hashlib.sha256
+        ).digest()
+        if not hmac.compare_digest(provided_signature, expected_signature):
+            return False
+        issued_raw, ip_digest = payload.decode("utf-8").split(":", 1)
+        issued_at = int(issued_raw)
+    except (ValueError, TypeError, UnicodeDecodeError):
+        return False
+    current = int(time.time() if now is None else now)
+    expected_ip = hashlib.sha256(client_ip.encode("utf-8")).hexdigest()[:20]
+    return (
+        hmac.compare_digest(ip_digest, expected_ip)
+        and issued_at <= current + 60
+        and current - issued_at <= AI_SESSION_TTL_SECONDS
+    )
 
 
 async def check_rate_limit(

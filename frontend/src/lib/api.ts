@@ -1,8 +1,55 @@
-import type { AnalyticsResult, AskResult, DashboardData, Filters, Metadata } from "./types";
+import type {
+  AnalyticsResult,
+  AskResult,
+  ConversationTurn,
+  DashboardData,
+  Filters,
+  Metadata,
+} from "./types";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
+const AI_SESSION_KEY = "logistics-ai-session";
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+export const aiSession = {
+  get: () => {
+    try {
+      return sessionStorage.getItem(AI_SESSION_KEY) || "";
+    } catch {
+      return "";
+    }
+  },
+  set: (value: string) => {
+    try {
+      sessionStorage.setItem(AI_SESSION_KEY, value);
+    } catch {
+      // Session persistence is an optimization; Turnstile remains the fallback.
+    }
+  },
+  clear: () => {
+    try {
+      sessionStorage.removeItem(AI_SESSION_KEY);
+    } catch {
+      // Ignore unavailable browser storage.
+    }
+  },
+  has: () => Boolean(aiSession.get()),
+};
+
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  onResponse?: (response: Response) => void,
+): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", ...init?.headers },
@@ -16,8 +63,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         : Array.isArray(detail)
           ? detail.map((item) => item.msg || "Invalid request").join("; ")
           : `Request failed (${response.status})`;
-    throw new Error(message);
+    throw new ApiError(message, response.status);
   }
+  onResponse?.(response);
   return response.json();
 }
 
@@ -54,9 +102,38 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ filters, minimum_sample: 5, limit: 10 }),
     }),
-  ask: (question: string, turnstileToken?: string) =>
-    request<AskResult>("/api/ask", {
-      method: "POST",
-      body: JSON.stringify({ question, turnstile_token: turnstileToken }),
-    }),
+  ask: async (
+    question: string,
+    turnstileToken?: string,
+    history: ConversationTurn[] = [],
+  ) => {
+    const session = aiSession.get();
+    try {
+      return await request<AskResult>(
+        "/api/ask",
+        {
+          method: "POST",
+          headers: session ? { "X-AI-Session": session } : undefined,
+          body: JSON.stringify({
+            question,
+            turnstile_token: session ? undefined : turnstileToken,
+            history,
+          }),
+        },
+        (response) => {
+          const issuedSession = response.headers.get("X-AI-Session");
+          if (issuedSession) aiSession.set(issuedSession);
+        },
+      );
+    } catch (error) {
+      if (
+        session &&
+        error instanceof ApiError &&
+        [400, 401, 403].includes(error.status)
+      ) {
+        aiSession.clear();
+      }
+      throw error;
+    }
+  },
 };

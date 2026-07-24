@@ -19,7 +19,12 @@ from .models import (
     DiagnosticQuery,
     ForecastQuery,
 )
-from .security import check_rate_limit, verify_turnstile
+from .security import (
+    check_rate_limit,
+    create_ai_session,
+    verify_ai_session,
+    verify_turnstile,
+)
 
 app = FastAPI(
     title="Logistics Intelligence API",
@@ -71,7 +76,10 @@ async def security_headers(request: Request, call_next):
     if origin:
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        response.headers["Access-Control-Allow-Headers"] = (
+            "Content-Type, X-AI-Session"
+        )
+        response.headers["Access-Control-Expose-Headers"] = "X-AI-Session"
         response.headers["Vary"] = "Origin"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
@@ -156,23 +164,40 @@ async def diagnostics(query: DiagnosticQuery) -> AnalyticsResponse:
     response_model=AnalyticsResponse | ClarificationResponse,
 )
 async def ask(
-    payload: AskRequest, request: Request
+    payload: AskRequest, request: Request, response: Response
 ) -> AnalyticsResponse | ClarificationResponse:
     client_ip = (
         request.headers.get("CF-Connecting-IP")
         or (request.client.host if request.client else "unknown")
     )
-    await verify_turnstile(
-        payload.turnstile_token,
+    environment = _binding(request, "ENVIRONMENT", "development")
+    session_secret = _binding(request, "AI_SESSION_SECRET")
+    has_session = verify_ai_session(
+        request.headers.get("X-AI-Session"),
         client_ip,
-        secret=_binding(request, "TURNSTILE_SECRET_KEY"),
-        environment=_binding(request, "ENVIRONMENT", "development"),
+        session_secret,
     )
+    if not has_session:
+        await verify_turnstile(
+            payload.turnstile_token,
+            client_ip,
+            secret=_binding(request, "TURNSTILE_SECRET_KEY"),
+            environment=environment,
+        )
+        if environment == "production" and not session_secret:
+            raise HTTPException(
+                status_code=503, detail="AI session signing is not configured."
+            )
+        if session_secret:
+            response.headers["X-AI-Session"] = create_ai_session(
+                client_ip, session_secret
+            )
     await check_rate_limit(
         client_ip, binding=_runtime_binding(request, "AI_RATE_LIMITER")
     )
     plan, model = await interpret_question(
         payload.question,
+        history=payload.history,
         api_key=_binding(request, "OPENROUTER_API_KEY"),
         model_name=_binding(request, "OPENROUTER_MODEL", DEFAULT_MODEL),
         public_app_url=_binding(request, "PUBLIC_APP_URL", "http://localhost:3000"),

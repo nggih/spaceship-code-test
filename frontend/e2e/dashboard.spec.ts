@@ -34,15 +34,22 @@ test("auto-runs a sparse SKU forecast with a visible confidence warning", async 
   await expect(page.getByText(/Low-confidence SKU forecast/i)).toBeVisible();
 });
 
-test("renders an AI clarification and saves query history", async ({ page }) => {
+test("supports a multi-turn AI conversation and sends bounded context", async ({ page }) => {
+  const requests: Array<Record<string, unknown>> = [];
   await page.route("**/api/ask", async (route) => {
+    requests.push(route.request().postDataJSON());
+    const firstTurn = requests.length === 1;
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
         kind: "clarification",
-        message: "Which carrier or region should I compare?",
-        suggestions: ["Which carrier has the highest delay rate?"],
+        message: firstTurn
+          ? "Which carrier or region should I compare?"
+          : "Would you like the highest or lowest delay rate?",
+        suggestions: firstTurn
+          ? ["Compare carrier delay rates"]
+          : ["Show the highest delay rate"],
         query_plan: { intent: "clarification" },
         meta: { model: "test-model" },
       }),
@@ -50,9 +57,28 @@ test("renders an AI clarification and saves query history", async ({ page }) => 
   });
   await page.goto("/");
   await page.getByRole("tab", { name: "Ask AI" }).click();
-  const input = page.getByLabel("Ask a logistics analytics question");
+  await expect(page.getByText(/Ask a question, then refine it naturally/i)).toBeVisible();
+  const input = page.getByLabel("Message Logistics AI");
   await input.fill("Why?");
-  await page.getByRole("button", { name: "Submit question" }).click();
+  await page.getByRole("button", { name: "Send message" }).click();
   await expect(page.getByText("Which carrier or region should I compare?")).toBeVisible();
-  await expect(page.getByText("Recent questions (1)")).toBeVisible();
+
+  await input.fill("Compare carrier delay rates");
+  await page.getByRole("button", { name: "Send message" }).click();
+  await expect(
+    page.getByText("Would you like the highest or lowest delay rate?"),
+  ).toBeVisible();
+  expect(requests).toHaveLength(2);
+  expect(requests[0].history).toEqual([]);
+  expect(requests[1].history).toEqual([
+    { role: "user", content: "Why?" },
+    {
+      role: "assistant",
+      content: "Which carrier or region should I compare?",
+    },
+  ]);
+
+  await page.getByRole("button", { name: "New conversation" }).click();
+  await expect(page.getByText("Why?", { exact: true })).not.toBeVisible();
+  await expect(page.getByText(/Ask a question, then refine it naturally/i)).toBeVisible();
 });

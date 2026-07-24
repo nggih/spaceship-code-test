@@ -5,7 +5,8 @@ This checklist consolidates the requirements from `Coding_assignment.md` and `lo
 - [x] Five required logistics KPIs
 - [x] At least two operational charts
 - [x] Shared dataset and filters
-- [x] Natural-language question interface
+- [x] Multi-turn natural-language conversation interface
+- [x] Bounded prior-turn context for follow-up questions
 - [x] Validated AI orchestration rather than AI-generated answers
 - [x] No deterministic natural-language parser, text-to-SQL, or AI code execution
 - [x] Production prompt contract for metrics, dates, routing, ambiguity, and examples
@@ -16,12 +17,13 @@ This checklist consolidates the requirements from `Coding_assignment.md` and `lo
 - [x] Read-only analytics
 - [x] Overall, category, and guarded SKU forecasts
 - [x] Forecast values, chart, recommendation, warnings, and methodology
-- [x] Query history, ambiguity UI, result caching, retries, and empty states
+- [x] Persistent browser conversation, ambiguity UI, result caching, retries, and empty states
 - [x] shadcn/ui component structure, Tailwind CSS, and ECharts
 - [x] Public-host configuration for Cloudflare
 - [x] Docker Compose local environment
 - [x] Secret-safe configuration
-- [x] Turnstile, body limits, exact CORS, and two-layer AI throttling
+- [x] First-message Turnstile with signed session reuse
+- [x] Body/history limits, exact CORS, and two-layer AI throttling
 - [x] Backend tests (25 passing)
 - [x] Frontend lint, unit tests, production build, and Playwright (8 passing)
 - [x] Docker Compose smoke test on frontend port 3000

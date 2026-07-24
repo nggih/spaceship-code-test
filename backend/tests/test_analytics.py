@@ -174,6 +174,15 @@ def test_api_validation_and_health():
     assert unknown_filter.status_code == 400
     assert "Unknown carriers" in unknown_filter.json()["detail"]
 
+    invalid_history = client.post(
+        "/api/ask",
+        json={
+            "question": "Now compare by region",
+            "history": [{"role": "assistant", "content": "Previous answer"}],
+        },
+    )
+    assert invalid_history.status_code == 422
+
 
 def test_dashboard_payload_endpoint():
     response = client.post("/api/dashboard", json={"metric": "order_count"})

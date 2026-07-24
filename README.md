@@ -12,7 +12,7 @@ An AI-powered logistics analytics dashboard built for the coding assignment in [
 - Structured query plans and explainability
 - Overall, category, and guarded low-confidence SKU forecasts
 - Inventory guidance with explicit methodology
-- Local query history, result caching, ambiguity handling, and retry states
+- Persistent conversational AI thread, result caching, ambiguity handling, and retry states
 - Docker Compose local environment
 - Deployed Cloudflare Pages frontend and Python Worker API
 
@@ -80,6 +80,7 @@ npm run test:e2e
 | `OPENROUTER_API_KEY` | Secret, backend only | Dedicated OpenRouter inference key |
 | `OPENROUTER_MODEL` | Backend | Defaults to `openrouter/free` |
 | `TURNSTILE_SECRET_KEY` | Secret, backend only | Server-side challenge verification |
+| `AI_SESSION_SECRET` | Secret, backend only | Signs one-hour, IP-bound AI session tokens |
 | `VITE_TURNSTILE_SITE_KEY` | Public | Browser Turnstile widget |
 | `VITE_API_URL` | Public | Production Worker base URL; blank uses same origin/proxy |
 | `ALLOWED_ORIGINS` | Backend | Comma-separated exact frontend origins |
@@ -95,9 +96,10 @@ Never put `OPENROUTER_API_KEY` or `TURNSTILE_SECRET_KEY` in a `VITE_` variable.
 React dashboard
    ├── dashboard filters ───────────────→ validated analytics query
    ├── forecast controls ───────────────→ forecast tool
-   └── natural-language question
+   └── conversational question + bounded prior turns
           ↓
-       Turnstile + rate limit
+       first message: Turnstile → signed AI session
+       follow-ups: validated AI session → rate limit
           ↓
        OpenRouter structured interpretation
           ↓
@@ -108,7 +110,7 @@ React dashboard
        computed answer + chart contract + table + explanation
 ```
 
-The AI is an interpreter, not the source of truth. Every natural-language question is interpreted through OpenRouter—there is no deterministic natural-language parser. The production prompt defines metric synonyms, intent routing, date semantics, allowlisted entities, ambiguity rules, and canonical assignment examples. The model sees the schema, available filter values, and dataset date range—not dataset rows—and must return a strict `AnalysisPlan`.
+The AI is an interpreter, not the source of truth. Every natural-language question is interpreted through OpenRouter—there is no deterministic natural-language parser. The production prompt defines metric synonyms, intent routing, date semantics, allowlisted entities, ambiguity rules, multi-turn follow-up behavior, and canonical assignment examples. The model receives at most four completed prior exchanges, the schema, available filter values, and dataset date range—not dataset rows—and must return a complete strict `AnalysisPlan` for the newest message.
 
 The schema is inlined for provider portability, OpenRouter structured output is requested with `strict: true` and `require_parameters: true`, and Pydantic performs a second validation boundary. `openrouter/free` is attempted first; invalid or unavailable router output falls back to a known structured-output free model. The actual routed model is returned in result metadata. Unknown fields, values, and semantically inconsistent plans are rejected.
 
@@ -159,7 +161,9 @@ Use a dedicated OpenRouter inference key:
 4. Use `openrouter/free`; validation may fall back only to another free model.
 5. Store the key only as a Worker secret.
 
-The deployed key reports a $5 lifetime cap. The public AI endpoint additionally requires server-verified Turnstile, applies Cloudflare's distributed 5-request/60-second burst limiter plus a 5-request/10-minute warm-isolate window, limits questions to 500 characters, rejects bodies over 16 KiB, caps model output, applies upstream timeouts, and does not log secrets or full model responses.
+The deployed key reports a $5 lifetime cap. The first AI message in a browser session requires server-verified Turnstile. The Worker then returns a one-hour HMAC-signed token bound to the client IP; follow-up messages reuse it without another challenge. A new tab, expiration, IP change, or invalid signature requires Turnstile again. This is abuse verification, not user authentication.
+
+Every message still passes Cloudflare's distributed 5-request/60-second burst limiter plus a 5-request/10-minute warm-isolate window. Questions and conversation turns are limited to 500 characters, history is capped at eight alternating turns, bodies over 16 KiB are rejected, model output is capped, upstream calls time out, and secrets/full upstream responses are never logged.
 
 ## Cloudflare deployment
 
@@ -192,7 +196,7 @@ The deployed Pages origin must exactly match the backend `ALLOWED_ORIGINS`.
 
 Backend tests cover dataset invariants, KPIs, filter combinations, time grouping, delay ranking, diagnostics, all forecast scopes, cache behavior, schema rejection, AI ambiguity and failover, and both limiter paths.
 
-Frontend unit tests cover API mapping, validation errors, and empty states. Playwright runs the real React/FastAPI stack on desktop and mobile Chromium, exercising filters, diagnostics, SKU forecasts, clarification UI, and query history.
+Frontend unit tests cover API mapping, session rotation, validation errors, and empty states. Playwright runs the real React/FastAPI stack on desktop and mobile Chromium, exercising filters, diagnostics, SKU forecasts, multi-turn context, clarification UI, and conversation reset.
 
 ```bash
 cd backend && uv run pytest
@@ -212,7 +216,7 @@ cd frontend && npm run lint && npm test && npm run build && npm run test:e2e
 - No promised delivery date, so true SLA lateness cannot be calculated.
 - Only one year of data is available for forecasting.
 - Free OpenRouter models may change between requests.
-- Query history is browser-local; there is no cross-device history or authentication.
+- Conversation history is browser-local; there is no cross-device history or user authentication.
 - Cloudflare Python Workers remain a beta runtime.
 
 ## Future improvements

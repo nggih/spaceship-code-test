@@ -12,7 +12,7 @@ ALLOWED_ORIGINS = "https://logistics-intelligence-dashboard.pages.dev"
 PUBLIC_APP_URL = "https://logistics-intelligence-dashboard.pages.dev"
 
 [secrets]
-required = ["OPENROUTER_API_KEY", "TURNSTILE_SECRET_KEY"]
+required = ["OPENROUTER_API_KEY", "TURNSTILE_SECRET_KEY", "AI_SESSION_SECRET"]
 
 [python_modules]
 excludes = [
