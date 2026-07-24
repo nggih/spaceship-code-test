@@ -58,7 +58,7 @@ describe("API client", () => {
     fetchMock.mockRestore();
   });
 
-  it("sends bounded chat history and rotates the AI session header", async () => {
+  it("sends bounded chat history with its persisted conversation id", async () => {
     aiSession.set("existing-session");
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
@@ -78,16 +78,22 @@ describe("API client", () => {
         },
       ),
     );
-    await api.ask("Now compare that by region", undefined, [
-      { role: "user", content: "Which carrier has the highest delay rate?" },
-      { role: "assistant", content: "GLS had the highest delay rate." },
-    ]);
+    await api.ask(
+      "Now compare that by region",
+      undefined,
+      [
+        { role: "user", content: "Which carrier has the highest delay rate?" },
+        { role: "assistant", content: "GLS had the highest delay rate." },
+      ],
+      "conversation-123",
+    );
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect((init.headers as Record<string, string>)["X-AI-Session"]).toBe(
       "existing-session",
     );
     expect(JSON.parse(String(init.body))).toMatchObject({
       question: "Now compare that by region",
+      conversation_id: "conversation-123",
       history: [
         { role: "user", content: "Which carrier has the highest delay rate?" },
         { role: "assistant", content: "GLS had the highest delay rate." },
@@ -95,5 +101,17 @@ describe("API client", () => {
     });
     expect(JSON.parse(String(init.body))).not.toHaveProperty("turnstile_token");
     expect(aiSession.get()).toBe("rotated-session");
+  });
+
+  it("supports deleting a persisted conversation with an empty response", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 204 }));
+
+    await expect(api.deleteConversation("conversation-123")).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/conversations/conversation-123"),
+      expect.objectContaining({ method: "DELETE", credentials: "include" }),
+    );
   });
 });

@@ -13,7 +13,7 @@ An AI-powered logistics analytics dashboard built for the coding assignment in [
 - Overall, category, and guarded low-confidence SKU forecasts
 - Automatic backtesting across four approved forecasting methods, with manual override
 - Inventory guidance with explicit methodology
-- Persistent conversational AI thread, result caching, ambiguity handling, and retry states
+- Account-owned conversational history, result caching, ambiguity handling, and retry states
 - Docker Compose local environment
 - Deployed Cloudflare Pages frontend and Python Worker API
 
@@ -25,7 +25,10 @@ The two supplied specifications are consistent. [`Coding_assignment.md`](docs/Co
 - API health: <https://logistics-intelligence-api.nggih.workers.dev/api/health>
 - Public repository: <https://github.com/nggih/spaceship-code-test>
 
-The production Worker uses exact-origin CORS, a managed Turnstile widget, Worker secrets, and a Cloudflare Rate Limiting binding.
+The production architecture uses Cloudflare Access login, Worker-side Access
+JWT verification, account-scoped D1 history, exact-origin CORS, Worker secrets,
+and a Cloudflare Rate Limiting binding. Reviewer credentials are distributed
+privately, never committed.
 
 ## Quick start with Docker Compose
 
@@ -49,7 +52,10 @@ For example, if another local service owns port 8000:
 BACKEND_PORT=18000 FRONTEND_PORT=3000 docker compose up --build
 ```
 
-Dashboard analytics and forecasting work without external credentials. Add `OPENROUTER_API_KEY` to `.env` to enable natural-language interpretation. Turnstile is bypassed only when `ENVIRONMENT` is not `production` and no Turnstile secret is configured.
+Dashboard analytics and forecasting work locally without external credentials.
+Docker assigns the configurable `DEV_AUTH_EMAIL` identity and persists its
+history in a named volume. Add `OPENROUTER_API_KEY` to `.env` to enable
+natural-language interpretation.
 
 ## Local development with uv
 
@@ -84,6 +90,11 @@ npm run test:e2e
 | `AI_SESSION_SECRET` | Secret, backend only | Signs one-hour, IP-bound AI session tokens |
 | `VITE_TURNSTILE_SITE_KEY` | Public | Browser Turnstile widget |
 | `VITE_API_URL` | Public | Production Worker base URL; blank uses same origin/proxy |
+| `ACCESS_TEAM_DOMAIN` | Backend | Cloudflare Access issuer, configured on the Worker |
+| `ACCESS_AUD` | Backend | Pages Access application audience |
+| `DEV_AUTH_EMAIL` | Local backend | Explicit Docker development identity |
+| `HISTORY_DB_PATH` | Local backend | SQLite history path; D1 is used in the Worker |
+| `TURNSTILE_AFTER_LOGIN` | Backend | Optional extra first-AI-request challenge; defaults off |
 | `ALLOWED_ORIGINS` | Backend | Comma-separated exact frontend origins |
 | `PUBLIC_APP_URL` | Backend | OpenRouter attribution URL |
 | `ENVIRONMENT` | Backend | Use `production` to require Turnstile configuration |
@@ -99,8 +110,7 @@ React dashboard
    ├── forecast controls ───────────────→ forecast tool
    └── conversational question + bounded prior turns
           ↓
-       first message: Turnstile → signed AI session
-       follow-ups: validated AI session → rate limit
+       Cloudflare Access identity → per-user rate limit
           ↓
        OpenRouter native function-tool selection
           ↓
@@ -166,9 +176,19 @@ Use a dedicated OpenRouter inference key:
 4. Use `openrouter/free`; validation may fall back only to another free model.
 5. Store the key only as a Worker secret.
 
-The deployed key reports a $5 lifetime cap. The first AI message in a browser session requires server-verified Turnstile. The Worker then returns a one-hour HMAC-signed token bound to the client IP; follow-up messages reuse it without another challenge. A new tab, expiration, IP change, or invalid signature requires Turnstile again. This is abuse verification, not user authentication.
+The deployed key reports a $5 lifetime cap. Cloudflare Access performs browser
+login before the application loads. The Worker independently validates the
+Access JWT signature, issuer, audience, expiry, and subject before serving
+analytics or history. Turnstile can remain enabled as an additional
+first-AI-request challenge with `TURNSTILE_AFTER_LOGIN=true`, but is disabled
+for authenticated reviewer sessions by default.
 
-Every message still passes Cloudflare's distributed 5-request/60-second burst limiter plus a 5-request/10-minute warm-isolate window. Questions and conversation turns are limited to 500 characters, history is capped at eight alternating turns, bodies over 16 KiB are rejected, model output is capped, upstream calls time out, and secrets/full upstream responses are never logged.
+Every message passes Cloudflare's distributed 5-request/60-second burst limiter
+plus a 5-request/10-minute warm-isolate window keyed by the authenticated Access
+subject. Questions and conversation turns are limited to 500 characters,
+server-sourced context is capped at eight alternating turns, bodies over 16 KiB
+are rejected, model output is capped, upstream calls time out, and secrets/full
+upstream responses are never logged.
 
 ## Cloudflare deployment
 
@@ -180,8 +200,9 @@ Python Workers are currently beta. The implementation avoids pandas and native s
 cd backend
 uv sync
 uv run pywrangler secret put OPENROUTER_API_KEY
-uv run pywrangler secret put TURNSTILE_SECRET_KEY
-uv run pywrangler secret put AI_SESSION_SECRET
+uv run pywrangler secret put ACCESS_TEAM_DOMAIN
+uv run pywrangler secret put ACCESS_AUD
+npx wrangler d1 migrations apply logistics-intelligence-history --remote
 uv run pywrangler deploy
 ```
 
@@ -194,15 +215,30 @@ The deployed Pages project is `logistics-intelligence-dashboard`. For another ac
 - Root directory: `frontend`
 - Build command: `npm ci && npm run build`
 - Output directory: `dist`
-- Variables: `VITE_API_URL` and `VITE_TURNSTILE_SITE_KEY`
+- `VITE_API_URL` left blank so `/api/*` uses the authenticated Pages Function proxy
 
 The deployed Pages origin must exactly match the backend `ALLOWED_ORIGINS`.
+Complete the policy and credential steps in
+[`docs/CLOUDFLARE_ACCESS.md`](docs/CLOUDFLARE_ACCESS.md) before deployment.
+
+### Conversation persistence
+
+Cloudflare D1 stores conversation summaries, user/assistant messages, and the
+validated analytical result contract needed to restore charts and tables.
+Conversation list, read, rename, and delete operations are scoped by the
+immutable Access `sub` claim. Docker uses the same repository through SQLite in
+the `backend_state` volume, so local sessions survive container recreation.
 
 ## Testing
 
 Backend tests cover dataset invariants, KPIs, filter combinations, time grouping, delay ranking, diagnostics, every forecast scope and method, automatic MAE selection, boundary-month continuity, horizon validation, intent-specific plan rejection, cache behavior, AI ambiguity and failover, and both limiter paths.
 
-Frontend unit tests cover API mapping, session rotation, validation errors, empty states, and forecast-method evidence. Playwright runs the real React/FastAPI stack on desktop and mobile Chromium, exercising filters, diagnostics, automatic and manual SKU forecasts, multi-turn context, clarification UI, and conversation reset.
+Frontend unit tests cover API mapping, validation errors, empty states, and
+forecast-method evidence. Playwright runs the real React/FastAPI stack on
+desktop and mobile Chromium, exercising filters, diagnostics, automatic and
+manual SKU forecasts, multi-turn context, clarification UI, and conversation
+reset. Backend tests additionally verify Access claims and cross-user history
+isolation.
 
 ```bash
 cd backend && uv run pytest
@@ -212,7 +248,7 @@ cd frontend && npm run lint && npm test && npm run build && npm run test:e2e
 ## Assumptions and simplifications
 
 - The CSV is immutable and small enough to load once per process/isolate.
-- A database would add operational cost without improving this read-only 400-row exercise.
+- The immutable analytical CSV remains in memory; D1 stores only user-owned conversation history.
 - Relative dates use the latest dataset date so assignment examples remain meaningful.
 - The 10-minute limiter is per warm Worker isolate; the Cloudflare binding adds a distributed burst boundary.
 - Free models may be slow, rate-limited, invalid, or temporarily unavailable. Invalid plans are retried/fail over; the UI reports final unavailability rather than fabricating results.
@@ -222,14 +258,13 @@ cd frontend && npm run lint && npm test && npm run build && npm run test:e2e
 - No promised delivery date, so true SLA lateness cannot be calculated.
 - Only one year of data is available for forecasting.
 - Free OpenRouter models may change between requests.
-- Conversation history is browser-local; there is no cross-device history or user authentication.
 - Cloudflare Python Workers remain a beta runtime.
 
 ## Future improvements
 
 - Add promised delivery/SLA fields and carrier service levels.
 - Back analytics with D1 or an analytical store for larger datasets.
-- Add Durable Objects for an exact globally consistent 10-minute window and shared query history.
+- Add Durable Objects for an exact globally consistent 10-minute window.
 - Add longer demand history, prediction intervals, and seasonal methods once at least two annual cycles are available.
 - Add server-side semantic-plan caching after privacy and invalidation review.
 

@@ -96,3 +96,126 @@ test("supports a multi-turn AI conversation and sends bounded context", async ({
   await expect(page.getByText("Why?", { exact: true })).not.toBeVisible();
   await expect(page.getByText(/Ask a question, then refine it naturally/i)).toBeVisible();
 });
+
+test("restores, renames, and deletes account conversation history", async ({ page }) => {
+  let title = "Saved carrier analysis";
+  let deleted = false;
+  const conversationId = "conversation-history-test";
+  const result = {
+    kind: "result",
+    answer: "GLS has the highest observed delay rate at 28.6%.",
+    query_plan: { intent: "analytics", metric: "delay_rate", dimension: "carrier" },
+    chart: {
+      type: "table",
+      title: "Carrier delay rate",
+      x_key: "carrier",
+      y_keys: ["delay_rate"],
+      rows: [{ carrier: "GLS", delay_rate: 28.6 }],
+    },
+    table: {
+      columns: ["carrier", "delay_rate"],
+      rows: [{ carrier: "GLS", delay_rate: 28.6 }],
+    },
+    explainability: {
+      filters: {},
+      metric: "delay_rate",
+      metric_definition: "Delayed orders divided by delivered plus delayed orders.",
+      dimensions: ["carrier"],
+      data_anchor: "2025-12-30",
+      warnings: [],
+    },
+    meta: { model: "test-model", tool: "query_logistics_analytics" },
+  };
+
+  await page.route("**/api/conversations**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (request.method() === "GET" && path === "/api/conversations") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          conversations: deleted
+            ? []
+            : [
+                {
+                  id: conversationId,
+                  title,
+                  created_at: "2026-07-25T00:00:00Z",
+                  updated_at: "2026-07-25T00:00:00Z",
+                  message_count: 2,
+                },
+              ],
+        }),
+      });
+      return;
+    }
+    if (request.method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: conversationId,
+          title,
+          created_at: "2026-07-25T00:00:00Z",
+          updated_at: "2026-07-25T00:00:00Z",
+          messages: [
+            {
+              id: "message-user",
+              role: "user",
+              content: "Which carrier has the highest delay rate?",
+              result: null,
+              created_at: "2026-07-25T00:00:00Z",
+            },
+            {
+              id: "message-assistant",
+              role: "assistant",
+              content: result.answer,
+              result,
+              created_at: "2026-07-25T00:00:01Z",
+            },
+          ],
+        }),
+      });
+      return;
+    }
+    if (request.method() === "PATCH") {
+      title = request.postDataJSON().title;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: conversationId,
+          title,
+          updated_at: "2026-07-25T00:01:00Z",
+        }),
+      });
+      return;
+    }
+    if (request.method() === "DELETE") {
+      deleted = true;
+      await route.fulfill({ status: 204, body: "" });
+      return;
+    }
+    await route.abort();
+  });
+
+  await page.goto("/");
+  await page.getByRole("tab", { name: "Ask AI" }).click();
+  await page.getByRole("button", { name: "Open Saved carrier analysis" }).click();
+  await expect(
+    page
+      .getByRole("paragraph")
+      .filter({ hasText: "Which carrier has the highest delay rate?" }),
+  ).toBeVisible();
+  await expect(page.getByText(result.answer, { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Rename Saved carrier analysis" }).click();
+  await page.getByRole("textbox", { name: "Conversation title" }).fill("Carrier risk review");
+  await page.getByRole("button", { name: "Save conversation title" }).click();
+  await expect(page.getByText("Carrier risk review", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Delete Carrier risk review" }).click();
+  await expect(page.getByText("Carrier risk review", { exact: true })).not.toBeVisible();
+  await expect(page.getByText(/Ask a question, then refine it naturally/i)).toBeVisible();
+});

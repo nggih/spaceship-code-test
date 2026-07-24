@@ -9,6 +9,8 @@ from typing import Any
 
 from fastapi import HTTPException, Request
 
+_jwks_cache: dict[str, Any] = {"expires_at": 0.0, "keys": []}
+
 
 @dataclass(frozen=True)
 class AuthUser:
@@ -48,7 +50,11 @@ def _validate_claims(
     )
     if payload.get("iss") != issuer or audience not in audiences:
         raise HTTPException(status_code=401, detail="Authentication token is not valid here.")
-    if int(payload.get("exp", 0)) <= current or int(payload.get("nbf", 0)) > current + 60:
+    expires_at = payload.get("exp")
+    not_before = payload.get("nbf", 0)
+    if not isinstance(expires_at, (int, float)) or expires_at <= current:
+        raise HTTPException(status_code=401, detail="Authentication session has expired.")
+    if isinstance(not_before, (int, float)) and not_before > current + 60:
         raise HTTPException(status_code=401, detail="Authentication session has expired.")
     subject = payload.get("sub")
     email = payload.get("email")
@@ -69,7 +75,7 @@ async def _verify_access_signature(
 ) -> None:
     """Verify an Access RS256 JWT with Web Crypto in the Python Worker runtime."""
     try:
-        from js import Object, Uint8Array, crypto, fetch  # type: ignore[import-not-found]
+        from js import Object, crypto, fetch  # type: ignore[import-not-found]
         from pyodide.ffi import to_js  # type: ignore[import-not-found]
     except ImportError as exc:
         raise HTTPException(
@@ -80,11 +86,16 @@ async def _verify_access_signature(
     kid = header.get("kid")
     if header.get("alg") != "RS256" or not isinstance(kid, str):
         raise HTTPException(status_code=401, detail="Unsupported authentication token.")
-    response = await fetch(f"{team_domain}/cdn-cgi/access/certs")
-    if not response.ok:
-        raise HTTPException(status_code=503, detail="Unable to verify authentication.")
-    jwks = (await response.json()).to_py()
-    jwk = next((key for key in jwks.get("keys", []) if key.get("kid") == kid), None)
+    keys = _jwks_cache["keys"] if _jwks_cache["expires_at"] > time.time() else []
+    jwk = next((key for key in keys if key.get("kid") == kid), None)
+    if jwk is None:
+        response = await fetch(f"{team_domain}/cdn-cgi/access/certs")
+        if not response.ok:
+            raise HTTPException(status_code=503, detail="Unable to verify authentication.")
+        jwks = (await response.json()).to_py()
+        keys = jwks.get("keys", [])
+        _jwks_cache.update({"expires_at": time.time() + 3600, "keys": keys})
+        jwk = next((key for key in keys if key.get("kid") == kid), None)
     if jwk is None:
         raise HTTPException(status_code=401, detail="Authentication signing key is unknown.")
 
@@ -107,8 +118,8 @@ async def _verify_access_signature(
     valid = await crypto.subtle.verify(
         algorithm,
         public_key,
-        Uint8Array.new(signature),
-        Uint8Array.new(signed),
+        to_js(signature),
+        to_js(signed),
     )
     if not bool(valid):
         raise HTTPException(status_code=401, detail="Invalid authentication signature.")

@@ -305,6 +305,7 @@ export function AIPanel() {
                       <div className="flex items-center gap-1 p-1">
                         <button
                           type="button"
+                          aria-label={`Open ${conversation.title}`}
                           onClick={() => void openConversation(conversation.id)}
                           className="min-w-0 flex-1 rounded-lg px-2 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b9f55b]"
                         >
