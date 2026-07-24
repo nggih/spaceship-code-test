@@ -27,11 +27,11 @@ docker compose up --build
 
 Open:
 
-- Dashboard: <http://localhost:15173>
-- API documentation: <http://localhost:18000/docs>
-- API health: <http://localhost:18000/api/health>
+- Dashboard: <http://localhost:5173>
+- API documentation: <http://localhost:8000/docs>
+- API health: <http://localhost:8000/api/health>
 
-The default host ports deliberately avoid the commonly occupied Vite/FastAPI ports. Override them with `FRONTEND_PORT` and `BACKEND_PORT` in `.env` when needed.
+Override the default ports with `FRONTEND_PORT` and `BACKEND_PORT` in `.env` when needed.
 
 Dashboard analytics and forecasting work without external credentials. Add `OPENROUTER_API_KEY` to `.env` to enable natural-language interpretation. Turnstile is bypassed only when `ENVIRONMENT` is not `production` and no Turnstile secret is configured.
 
