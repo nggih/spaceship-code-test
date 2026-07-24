@@ -249,6 +249,7 @@ class AskRequest(BaseModel):
 
     question: str = Field(min_length=3, max_length=500)
     turnstile_token: str | None = Field(default=None, max_length=4096)
+    conversation_id: str | None = Field(default=None, max_length=64)
     history: list[ConversationTurn] = Field(default_factory=list, max_length=8)
 
     @model_validator(mode="after")
@@ -262,6 +263,18 @@ class AskRequest(BaseModel):
         if self.history and self.history[-1].role != "assistant":
             raise ValueError("history must end with an assistant turn")
         return self
+
+
+class ConversationCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(default="New conversation", min_length=1, max_length=120)
+
+
+class ConversationUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=120)
 
 
 class ChartSpec(BaseModel):

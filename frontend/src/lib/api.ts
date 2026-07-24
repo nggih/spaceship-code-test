@@ -1,6 +1,9 @@
 import type {
   AnalyticsResult,
   AskResult,
+  AuthUser,
+  ConversationDetail,
+  ConversationSummary,
   ConversationTurn,
   DashboardData,
   Filters,
@@ -53,6 +56,7 @@ async function request<T>(
 ): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
+    credentials: "include",
     headers: { "Content-Type": "application/json", ...init?.headers },
   });
   if (!response.ok) {
@@ -67,10 +71,30 @@ async function request<T>(
     throw new ApiError(message, response.status);
   }
   onResponse?.(response);
+  if (response.status === 204) return undefined as T;
   return response.json();
 }
 
 export const api = {
+  me: () => request<AuthUser>("/api/auth/me"),
+  conversations: () =>
+    request<{ conversations: ConversationSummary[] }>("/api/conversations"),
+  conversation: (id: string) =>
+    request<ConversationDetail>(`/api/conversations/${encodeURIComponent(id)}`),
+  createConversation: (title = "New conversation") =>
+    request<ConversationSummary>("/api/conversations", {
+      method: "POST",
+      body: JSON.stringify({ title }),
+    }),
+  renameConversation: (id: string, title: string) =>
+    request<ConversationSummary>(`/api/conversations/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+    }),
+  deleteConversation: (id: string) =>
+    request<void>(`/api/conversations/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
   health: () =>
     request<{
       status: string;
@@ -109,6 +133,7 @@ export const api = {
     question: string,
     turnstileToken?: string,
     history: ConversationTurn[] = [],
+    conversationId?: string,
   ) => {
     const session = aiSession.get();
     try {
@@ -120,6 +145,7 @@ export const api = {
           body: JSON.stringify({
             question,
             turnstile_token: session ? undefined : turnstileToken,
+            conversation_id: conversationId,
             history,
           }),
         },

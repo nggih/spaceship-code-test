@@ -10,9 +10,10 @@ ENVIRONMENT = "production"
 OPENROUTER_MODEL = "openrouter/free"
 ALLOWED_ORIGINS = "https://logistics-intelligence-dashboard.pages.dev"
 PUBLIC_APP_URL = "https://logistics-intelligence-dashboard.pages.dev"
+TURNSTILE_AFTER_LOGIN = "false"
 
 [secrets]
-required = ["OPENROUTER_API_KEY", "TURNSTILE_SECRET_KEY", "AI_SESSION_SECRET"]
+required = ["OPENROUTER_API_KEY"]
 
 [python_modules]
 excludes = [
@@ -26,3 +27,9 @@ namespace_id = "24072501"
   [ratelimits.simple]
   limit = 5
   period = 60
+
+[[d1_databases]]
+binding = "CONVERSATIONS_DB"
+database_name = "logistics-intelligence-history"
+database_id = "1c527714-9803-4778-8844-97faca2b5a40"
+migrations_dir = "migrations"

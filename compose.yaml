@@ -10,10 +10,13 @@ services:
       DATA_PATH: /app/data/mock_logistics_data.csv
       ALLOWED_ORIGINS: http://localhost:${FRONTEND_PORT:-3000}
       ENVIRONMENT: development
+      DEV_AUTH_EMAIL: ${DEV_AUTH_EMAIL:-reviewer@local.test}
+      HISTORY_DB_PATH: /app/state/conversations.db
     volumes:
       - ./backend/src/app:/app/app
       - ./backend/tests:/app/tests
       - ./data:/app/data:ro
+      - backend_state:/app/state
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     healthcheck:
@@ -47,3 +50,4 @@ services:
 
 volumes:
   frontend_node_modules:
+  backend_state:

@@ -6,13 +6,15 @@ import {
   ChevronDown,
   Clock3,
   LayoutDashboard,
+  LogOut,
   PackageCheck,
   Sparkles,
   TrendingUp,
   TriangleAlert,
+  UserRound,
 } from "lucide-react";
 import { api } from "./lib/api";
-import type { DashboardData, Filters, Metadata } from "./lib/types";
+import type { AuthUser, DashboardData, Filters, Metadata } from "./lib/types";
 import { AIPanel } from "./components/AIPanel";
 import { ChartExplainability } from "./components/ChartExplainability";
 import { DiagnosticPanel } from "./components/DiagnosticPanel";
@@ -53,16 +55,18 @@ export default function App() {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [health, setHealth] = useState<{ ai_configured: boolean } | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     setError("");
-    Promise.all([api.metadata(), api.health()])
-      .then(([meta, status]) => {
+    Promise.all([api.metadata(), api.health(), api.me()])
+      .then(([meta, status, identity]) => {
         setMetadata(meta);
         setHealth(status);
+        setUser(identity);
         setFilters((current) => ({
           ...current,
           start_date: meta.date_range.min,
@@ -120,6 +124,20 @@ export default function App() {
               <span className={`h-2 w-2 rounded-full ${health?.ai_configured ? "bg-[#b9f55b]" : "bg-[#dfb677]"}`} />
               AI {health?.ai_configured ? "ready" : "needs key"}
             </span>
+            {user && (
+              <span className="flex items-center gap-2 rounded-full border border-white/8 px-3 py-1.5 text-xs text-[#b9c7c2]">
+                <UserRound size={13} />
+                <span className="max-w-48 truncate">{user.email}</span>
+              </span>
+            )}
+            {user?.logout_url && (
+              <a
+                href={user.logout_url}
+                className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-[#93a49e] hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b9f55b]"
+              >
+                <LogOut size={13} /> Sign out
+              </a>
+            )}
           </div>
         </div>
         <nav

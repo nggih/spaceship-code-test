@@ -2,20 +2,25 @@ from __future__ import annotations
 
 import os
 import uuid
+from typing import Annotated
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 
 from .ai import DEFAULT_MODEL, interpret_question
 from .analytics import dashboard_payload, run_analytics
+from .auth import AuthUser, require_user
 from .cache import analytics_cache, dashboard_cache, diagnostic_cache, forecast_cache
 from .data import DATA_MAX_DATE, DATA_MIN_DATE, ORDERS, metadata
 from .diagnostic import run_diagnostic
 from .forecast import run_forecast
+from .history import store_for_request
 from .models import (
     AnalyticsQuery,
     AnalyticsResponse,
     AskRequest,
     ClarificationResponse,
+    ConversationCreate,
+    ConversationUpdate,
     DiagnosticQuery,
     ForecastQuery,
 )
@@ -31,6 +36,7 @@ app = FastAPI(
     version="0.1.0",
     description="Validated, read-only analytics for the logistics assignment dataset.",
 )
+CurrentUser = Annotated[AuthUser, Depends(require_user)]
 
 
 def _binding(request: Request, name: str, default: str | None = None) -> str | None:
@@ -76,8 +82,12 @@ async def security_headers(request: Request, call_next):
         response = await call_next(request)
     if origin:
         response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-AI-Session"
+        response.headers["Access-Control-Allow-Methods"] = (
+            "GET, POST, PATCH, DELETE, OPTIONS"
+        )
+        response.headers["Access-Control-Allow-Headers"] = (
+            "Content-Type, X-AI-Session, X-Dev-User"
+        )
         response.headers["Access-Control-Expose-Headers"] = "X-AI-Session"
         response.headers["Vary"] = "Origin"
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -97,6 +107,12 @@ async def health(request: Request) -> dict[str, object]:
         "data_min_date": DATA_MIN_DATE,
         "data_max_date": DATA_MAX_DATE,
         "ai_configured": bool(_binding(request, "OPENROUTER_API_KEY")),
+        "auth_required": _binding(request, "ENVIRONMENT", "development")
+        == "production",
+        "history_configured": bool(
+            _runtime_binding(request, "CONVERSATIONS_DB")
+            or _binding(request, "HISTORY_DB_PATH")
+        ),
         "cache": {
             "analytics": analytics_cache.stats(),
             "forecast": forecast_cache.stats(),
@@ -107,12 +123,12 @@ async def health(request: Request) -> dict[str, object]:
 
 
 @app.get("/api/metadata")
-async def get_metadata() -> dict[str, object]:
+async def get_metadata(user: CurrentUser) -> dict[str, object]:
     return metadata()
 
 
 @app.post("/api/dashboard")
-async def get_dashboard(query: AnalyticsQuery) -> dict[str, object]:
+async def get_dashboard(query: AnalyticsQuery, user: CurrentUser) -> dict[str, object]:
     try:
         result, _ = dashboard_cache.get_or_set(
             _cache_key("dashboard", query), lambda: dashboard_payload(query)
@@ -123,7 +139,7 @@ async def get_dashboard(query: AnalyticsQuery) -> dict[str, object]:
 
 
 @app.post("/api/analytics", response_model=AnalyticsResponse)
-async def analytics(query: AnalyticsQuery) -> AnalyticsResponse:
+async def analytics(query: AnalyticsQuery, user: CurrentUser) -> AnalyticsResponse:
     try:
         result, hit = analytics_cache.get_or_set(
             _cache_key("analytics", query), lambda: run_analytics(query)
@@ -134,7 +150,7 @@ async def analytics(query: AnalyticsQuery) -> AnalyticsResponse:
 
 
 @app.post("/api/forecast", response_model=AnalyticsResponse)
-async def forecast(query: ForecastQuery) -> AnalyticsResponse:
+async def forecast(query: ForecastQuery, user: CurrentUser) -> AnalyticsResponse:
     try:
         result, hit = forecast_cache.get_or_set(
             _cache_key("forecast", query), lambda: run_forecast(query)
@@ -145,7 +161,7 @@ async def forecast(query: ForecastQuery) -> AnalyticsResponse:
 
 
 @app.post("/api/diagnostics", response_model=AnalyticsResponse)
-async def diagnostics(query: DiagnosticQuery) -> AnalyticsResponse:
+async def diagnostics(query: DiagnosticQuery, user: CurrentUser) -> AnalyticsResponse:
     try:
         result, hit = diagnostic_cache.get_or_set(
             _cache_key("diagnostic", query), lambda: run_diagnostic(query)
@@ -160,39 +176,47 @@ async def diagnostics(query: DiagnosticQuery) -> AnalyticsResponse:
     response_model=AnalyticsResponse | ClarificationResponse,
 )
 async def ask(
-    payload: AskRequest, request: Request, response: Response
+    payload: AskRequest, request: Request, response: Response, user: CurrentUser
 ) -> AnalyticsResponse | ClarificationResponse:
     client_ip = request.headers.get("CF-Connecting-IP") or (
         request.client.host if request.client else "unknown"
     )
-    environment = _binding(request, "ENVIRONMENT", "development")
-    session_secret = _binding(request, "AI_SESSION_SECRET")
-    has_session = verify_ai_session(
-        request.headers.get("X-AI-Session"),
-        client_ip,
-        session_secret,
-    )
-    if not has_session:
-        await verify_turnstile(
-            payload.turnstile_token,
+    turnstile_after_login = (
+        _binding(request, "TURNSTILE_AFTER_LOGIN", "false") or "false"
+    ).lower() == "true"
+    if turnstile_after_login:
+        session_secret = _binding(request, "AI_SESSION_SECRET")
+        has_session = verify_ai_session(
+            request.headers.get("X-AI-Session"),
             client_ip,
-            secret=_binding(request, "TURNSTILE_SECRET_KEY"),
-            environment=environment,
+            session_secret,
         )
-        if environment == "production" and not session_secret:
-            raise HTTPException(
-                status_code=503, detail="AI session signing is not configured."
+        environment = _binding(request, "ENVIRONMENT", "development")
+        if not has_session:
+            await verify_turnstile(
+                payload.turnstile_token,
+                client_ip,
+                secret=_binding(request, "TURNSTILE_SECRET_KEY"),
+                environment=environment,
             )
-        if session_secret:
-            response.headers["X-AI-Session"] = create_ai_session(
-                client_ip, session_secret
-            )
+            if environment == "production" and not session_secret:
+                raise HTTPException(
+                    status_code=503, detail="AI session signing is not configured."
+                )
+            if session_secret:
+                response.headers["X-AI-Session"] = create_ai_session(
+                    client_ip, session_secret
+                )
+    store = store_for_request(request)
+    history = payload.history
+    if payload.conversation_id:
+        history = await store.context(user, payload.conversation_id)
     await check_rate_limit(
-        client_ip, binding=_runtime_binding(request, "AI_RATE_LIMITER")
+        user.subject, binding=_runtime_binding(request, "AI_RATE_LIMITER")
     )
     plan, model = await interpret_question(
         payload.question,
-        history=payload.history,
+        history=history,
         api_key=_binding(request, "OPENROUTER_API_KEY"),
         model_name=_binding(request, "OPENROUTER_MODEL", DEFAULT_MODEL),
         public_app_url=_binding(request, "PUBLIC_APP_URL", "http://localhost:3000"),
@@ -203,8 +227,12 @@ async def ask(
         "forecast": "forecast_demand",
         "clarification": "request_clarification",
     }[plan.intent]
+    conversation_id = payload.conversation_id
+    if not conversation_id:
+        conversation = await store.create(user, payload.question)
+        conversation_id = conversation["id"]
     if plan.intent == "clarification":
-        return ClarificationResponse(
+        result: AnalyticsResponse | ClarificationResponse = ClarificationResponse(
             message=plan.clarification_question
             or "Please clarify the metric, time range, or business dimension.",
             suggestions=[
@@ -217,8 +245,17 @@ async def ask(
                 "model": model,
                 "question": payload.question,
                 "tool": selected_tool,
+                "conversation_id": conversation_id,
             },
         )
+        await store.append_exchange(
+            user,
+            conversation_id,
+            payload.question,
+            result.message,
+            result.model_dump(mode="json"),
+        )
+        return result
     try:
         if plan.intent == "forecast":
             forecast_query = ForecastQuery(
@@ -228,13 +265,13 @@ async def ask(
                 horizon=plan.horizon or 1,
                 method=plan.forecast_method or "auto",
             )
-            result, cache_hit = forecast_cache.get_or_set(
+            computed, cache_hit = forecast_cache.get_or_set(
                 _cache_key("forecast", forecast_query),
                 lambda: run_forecast(forecast_query),
             )
         elif plan.intent == "diagnostic":
             diagnostic_query = DiagnosticQuery(filters=plan.filters)
-            result, cache_hit = diagnostic_cache.get_or_set(
+            computed, cache_hit = diagnostic_cache.get_or_set(
                 _cache_key("diagnostic", diagnostic_query),
                 lambda: run_diagnostic(diagnostic_query),
             )
@@ -247,20 +284,82 @@ async def ask(
                 sort=plan.sort,
                 limit=plan.limit,
             )
-            result, cache_hit = analytics_cache.get_or_set(
+            computed, cache_hit = analytics_cache.get_or_set(
                 _cache_key("analytics", analytics_query),
                 lambda: run_analytics(analytics_query),
             )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return result.model_copy(
+    result = computed.model_copy(
         update={
             "meta": {
-                **result.meta,
+                **computed.meta,
                 "model": model,
                 "tool": selected_tool,
                 "question": payload.question,
                 "cache_hit": cache_hit,
+                "conversation_id": conversation_id,
             }
         }
     )
+    await store.append_exchange(
+        user,
+        conversation_id,
+        payload.question,
+        result.answer,
+        result.model_dump(mode="json"),
+    )
+    return result
+
+
+@app.get("/api/auth/me")
+async def auth_me(request: Request, user: CurrentUser) -> dict[str, object]:
+    team_domain = (_binding(request, "ACCESS_TEAM_DOMAIN") or "").rstrip("/")
+    return {
+        "id": user.subject,
+        "email": user.email,
+        "name": user.name,
+        "logout_url": (
+            f"{team_domain}/cdn-cgi/access/logout" if team_domain else None
+        ),
+    }
+
+
+@app.get("/api/conversations")
+async def list_conversations(
+    request: Request, user: CurrentUser, limit: int = 50
+) -> dict[str, object]:
+    bounded_limit = max(1, min(limit, 100))
+    return {"conversations": await store_for_request(request).list(user, bounded_limit)}
+
+
+@app.post("/api/conversations", status_code=201)
+async def create_conversation(
+    payload: ConversationCreate, request: Request, user: CurrentUser
+) -> dict[str, object]:
+    return await store_for_request(request).create(user, payload.title)
+
+
+@app.get("/api/conversations/{conversation_id}")
+async def get_conversation(
+    conversation_id: str, request: Request, user: CurrentUser
+) -> dict[str, object]:
+    return await store_for_request(request).get(user, conversation_id)
+
+
+@app.patch("/api/conversations/{conversation_id}")
+async def rename_conversation(
+    conversation_id: str,
+    payload: ConversationUpdate,
+    request: Request,
+    user: CurrentUser,
+) -> dict[str, object]:
+    return await store_for_request(request).rename(user, conversation_id, payload.title)
+
+
+@app.delete("/api/conversations/{conversation_id}", status_code=204)
+async def delete_conversation(
+    conversation_id: str, request: Request, user: CurrentUser
+) -> Response:
+    await store_for_request(request).delete(user, conversation_id)
+    return Response(status_code=204)

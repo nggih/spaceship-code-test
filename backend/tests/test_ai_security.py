@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.ai import _system_prompt, _tool_definitions, interpret_question
+from app.auth import AuthUser, require_user
 from app.main import app
 from app.models import AnalysisPlan, ConversationTurn
 from app.security import (
@@ -292,6 +293,7 @@ def test_ask_reuses_ai_session_without_second_turnstile(monkeypatch):
     monkeypatch.setenv("TURNSTILE_SECRET_KEY", "turnstile-test")
     monkeypatch.setenv("AI_SESSION_SECRET", "session-test-secret")
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test")
+    monkeypatch.setenv("TURNSTILE_AFTER_LOGIN", "true")
     verifications = []
 
     async def fake_turnstile(token, client_ip, secret=None, environment=None):
@@ -312,26 +314,29 @@ def test_ask_reuses_ai_session_without_second_turnstile(monkeypatch):
     monkeypatch.setattr("app.main.interpret_question", fake_interpret)
     _requests.clear()
     client = TestClient(app)
-    first = client.post(
-        "/api/ask",
-        json={"question": "How many total orders?", "turnstile_token": "first-token"},
+    app.dependency_overrides[require_user] = lambda: AuthUser(
+        subject="test-user", email="reviewer@example.com"
     )
-    assert first.status_code == 200
-    session = first.headers["X-AI-Session"]
+    try:
+        first = client.post(
+            "/api/ask",
+            json={"question": "How many total orders?", "turnstile_token": "first-token"},
+        )
+        assert first.status_code == 200
+        session = first.headers["X-AI-Session"]
 
-    second = client.post(
-        "/api/ask",
-        headers={"X-AI-Session": session},
-        json={
-            "question": "Now show that by region",
-            "history": [
-                {"role": "user", "content": "How many total orders?"},
-                {"role": "assistant", "content": first.json()["answer"]},
-            ],
-        },
-    )
-    assert second.status_code == 200
-    assert len(verifications) == 1
+        second = client.post(
+            "/api/ask",
+            headers={"X-AI-Session": session},
+            json={
+                "question": "Now show that by region",
+                "conversation_id": first.json()["meta"]["conversation_id"],
+            },
+        )
+        assert second.status_code == 200
+        assert len(verifications) == 1
+    finally:
+        app.dependency_overrides.pop(require_user, None)
 
 
 def test_ask_routes_an_explicit_forecast_method(monkeypatch):

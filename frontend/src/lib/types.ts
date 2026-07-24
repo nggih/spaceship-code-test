@@ -53,6 +53,33 @@ export type ConversationTurn = {
   content: string;
 };
 
+export type AuthUser = {
+  id: string;
+  email: string;
+  name: string | null;
+  logout_url: string | null;
+};
+
+export type ConversationSummary = {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+};
+
+export type StoredMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  result: AskResult | null;
+  created_at: string;
+};
+
+export type ConversationDetail = Omit<ConversationSummary, "message_count"> & {
+  messages: StoredMessage[];
+};
+
 export type ForecastMethod =
   | "auto"
   | "moving_average_3"
