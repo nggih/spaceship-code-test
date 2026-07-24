@@ -1,6 +1,6 @@
 import { Braces, Database, Info } from "lucide-react";
 import type { AnalyticsResult } from "../lib/types";
-import { Chart } from "./Chart";
+import { LazyChart } from "./LazyChart";
 import { Badge, Card } from "./ui";
 
 export function ResultPanel({ result }: { result: AnalyticsResult }) {
@@ -10,7 +10,7 @@ export function ResultPanel({ result }: { result: AnalyticsResult }) {
       <div className="rounded-xl border border-[#b9f55b]/15 bg-[#b9f55b]/5 p-4 text-sm leading-6 text-[#e5f0ec]">
         {result.answer}
       </div>
-      {result.chart.rows.length > 0 && <Chart spec={result.chart} height={280} />}
+      {result.chart.rows.length > 0 && <LazyChart spec={result.chart} height={280} />}
       <details className="group rounded-xl border border-white/8 bg-black/10">
         <summary className="flex cursor-pointer list-none items-center gap-2 p-3 text-sm font-semibold text-[#c7d3cf]">
           <Braces size={15} /> Structured interpretation
@@ -28,11 +28,11 @@ export function ResultPanel({ result }: { result: AnalyticsResult }) {
           <Badge key={key}>{key}: {String(value)}</Badge>
         ))}
       </div>
-      <p className="flex items-start gap-2 text-xs leading-5 text-[#82938e]">
+      <p className="flex items-start gap-2 text-xs leading-5 text-[#93a49e]">
         <Info size={14} className="mt-0.5 shrink-0" />
         {result.explainability.metric_definition}
       </p>
-      <p className="text-xs text-[#71837d]">
+      <p className="text-xs text-[#93a49e]">
         Dataset date anchor: {result.explainability.data_anchor}
         {result.meta.model ? ` · Routed AI model: ${String(result.meta.model)}` : ""}
         {typeof result.meta.cache_hit === "boolean" ? ` · Cache: ${result.meta.cache_hit ? "hit" : "miss"}` : ""}
@@ -44,7 +44,7 @@ export function ResultPanel({ result }: { result: AnalyticsResult }) {
           </div>
           <div className="max-h-72 overflow-auto">
             <table className="w-full text-left text-xs">
-              <thead className="sticky top-0 bg-[#101e1b] text-[#82938e]">
+              <thead className="sticky top-0 bg-[#101e1b] text-[#93a49e]">
                 <tr>{columns.map((column) => <th key={column} className="px-4 py-3 font-medium">{column}</th>)}</tr>
               </thead>
               <tbody>

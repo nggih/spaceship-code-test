@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TrendingUp } from "lucide-react";
 import { api } from "../lib/api";
 import type { AnalyticsResult } from "../lib/types";
-import { Button, Card, Skeleton } from "./ui";
+import { Card, Skeleton } from "./ui";
 import { ResultPanel } from "./ResultPanel";
 
 export function ForecastPanel({ categories, skus }: { categories: string[]; skus: string[] }) {
@@ -14,35 +14,33 @@ export function ForecastPanel({ categories, skus }: { categories: string[]; skus
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  async function load() {
-    setLoading(true);
-    setError("");
-    try {
-      const selection = scope === "category" ? category : scope === "sku" ? sku : null;
-      setResult(await api.forecast(scope, selection, horizon));
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Forecast failed.");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const skuSet = useMemo(() => new Set(skus), [skus]);
+  const skuReady = scope !== "sku" || skuSet.has(sku);
 
   useEffect(() => {
+    if (!skuReady) return;
+    const selection = scope === "category" ? category : scope === "sku" ? sku : null;
     let active = true;
-    api.forecast("overall", null, 3)
-      .then((response) => {
-        if (active) setResult(response);
-      })
-      .catch((caught) => {
-        if (active) setError(caught instanceof Error ? caught.message : "Forecast failed.");
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      setError("");
+      api
+        .forecast(scope, selection, horizon)
+        .then((response) => {
+          if (active) setResult(response);
+        })
+        .catch((caught) => {
+          if (active) setError(caught instanceof Error ? caught.message : "Forecast failed.");
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    }, 300);
     return () => {
       active = false;
+      window.clearTimeout(timer);
     };
-  }, []);
+  }, [scope, category, sku, horizon, skuReady]);
 
   return (
     <Card className="overflow-hidden">
@@ -53,9 +51,12 @@ export function ForecastPanel({ categories, skus }: { categories: string[]; skus
             <span className="text-xs font-semibold uppercase tracking-[.18em]">Demand planning</span>
           </div>
           <h2 className="text-xl font-semibold">Forecast and inventory guide</h2>
+          <p className="mt-2 text-sm text-[#93a49e]">
+            Updates automatically as you change scope or horizon.
+          </p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
-          <label className="grid gap-1 text-xs text-[#82938e]">
+          <label className="grid gap-1 text-xs text-[#9db0aa]">
             Scope
             <select className="control" value={scope} onChange={(e) => setScope(e.target.value as typeof scope)}>
               <option value="overall">Overall</option>
@@ -64,7 +65,7 @@ export function ForecastPanel({ categories, skus }: { categories: string[]; skus
             </select>
           </label>
           {scope === "category" && (
-            <label className="grid gap-1 text-xs text-[#82938e]">
+            <label className="grid gap-1 text-xs text-[#9db0aa]">
               Category
               <select className="control" value={category} onChange={(e) => setCategory(e.target.value)}>
                 {categories.map((value) => <option key={value}>{value}</option>)}
@@ -72,7 +73,7 @@ export function ForecastPanel({ categories, skus }: { categories: string[]; skus
             </label>
           )}
           {scope === "sku" && (
-            <label className="grid gap-1 text-xs text-[#82938e]">
+            <label className="grid gap-1 text-xs text-[#9db0aa]">
               SKU
               <input
                 className="control w-44"
@@ -86,19 +87,21 @@ export function ForecastPanel({ categories, skus }: { categories: string[]; skus
               </datalist>
             </label>
           )}
-          <label className="grid gap-1 text-xs text-[#82938e]">
+          <label className="grid gap-1 text-xs text-[#9db0aa]">
             Horizon
             <select className="control" value={horizon} onChange={(e) => setHorizon(Number(e.target.value))}>
               {[1, 2, 3, 4, 5, 6].map((value) => <option key={value} value={value}>{value} months</option>)}
             </select>
           </label>
-          <Button onClick={load} disabled={loading}>Run forecast</Button>
         </div>
       </div>
       <div className="p-5 sm:p-6">
+        {scope === "sku" && !skuReady && (
+          <p className="text-sm text-[#dfb677]">Enter a known SKU (pick from the list) to forecast.</p>
+        )}
         {error && <p role="alert" className="text-sm text-[#f5b1b4]">{error}</p>}
-        {loading && <div className="grid gap-3"><Skeleton className="h-20" /><Skeleton className="h-72" /></div>}
-        {result && !loading && <ResultPanel result={result} />}
+        {loading && skuReady && <div className="grid gap-3"><Skeleton className="h-20" /><Skeleton className="h-72" /></div>}
+        {result && !loading && skuReady && <ResultPanel result={result} />}
       </div>
     </Card>
   );

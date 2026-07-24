@@ -7,3 +7,6 @@
 **/dist
 **/.wrangler
 docs
+
+**/python_modules
+python_modules

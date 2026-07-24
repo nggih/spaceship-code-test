@@ -26,7 +26,7 @@ export function Chart({ spec, height = 300 }: { spec: ChartSpec; height?: number
   if (spec.rows.length === 0) {
     return (
       <div
-        className="grid place-items-center rounded-xl border border-dashed border-white/10 text-sm text-[#71837d]"
+        className="grid place-items-center rounded-xl border border-dashed border-white/10 text-sm text-[#93a49e]"
         style={{ height }}
         role="status"
       >
@@ -66,12 +66,12 @@ export function Chart({ spec, height = 300 }: { spec: ChartSpec; height?: number
     const categoryAxis = {
       type: "category" as const,
       data: labels,
-      axisLabel: { color: "#80928d", hideOverlap: true },
+      axisLabel: { color: "#8ba39c", hideOverlap: true },
       axisLine: { lineStyle: { color: "#273733" } },
     };
     const valueAxis = {
       type: "value" as const,
-      axisLabel: { color: "#80928d" },
+      axisLabel: { color: "#8ba39c" },
       splitLine: { lineStyle: { color: "#192824" } },
     };
     option = {

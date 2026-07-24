@@ -84,7 +84,7 @@ export function AIPanel() {
           <span className="text-xs font-semibold uppercase tracking-[.18em]">Ask Logistics AI</span>
         </div>
         <h2 className="text-xl font-semibold tracking-tight">Question in. Computed answer out.</h2>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-[#82938e]">
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-[#93a49e]">
           AI interprets your question; validated tools calculate every result from the dataset.
         </p>
       </div>
@@ -132,7 +132,7 @@ export function AIPanel() {
             rows={2}
             maxLength={500}
             aria-label="Ask a logistics analytics question"
-            className="min-h-14 flex-1 resize-none bg-transparent px-3 py-2 text-sm leading-6 text-white outline-none placeholder:text-[#596964]"
+            className="min-h-14 flex-1 resize-none bg-transparent px-3 py-2 text-sm leading-6 text-white outline-none placeholder:text-[#7c8d88]"
             placeholder="Ask about orders, delays, carriers, regions, or demand…"
           />
           <Button

@@ -10,7 +10,7 @@ export function ChartExplainability({ spec }: { spec: ChartSpec }) {
       <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs font-medium text-[#91a39d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b9f55b]">
         <Info size={13} /> How this chart was calculated
       </summary>
-      <div className="grid gap-3 border-t border-white/7 p-3 text-xs text-[#82938e]">
+      <div className="grid gap-3 border-t border-white/7 p-3 text-xs text-[#93a49e]">
         <p>{explanation.metric_definition}</p>
         <div className="flex flex-wrap gap-2">
           <Badge>{explanation.metric.replaceAll("_", " ")}</Badge>

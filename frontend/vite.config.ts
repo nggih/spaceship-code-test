@@ -4,6 +4,11 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  build: {
+    // ECharts is intentionally deferred behind React.lazy; its isolated chunk
+    // contains the approved line/bar/pie renderers and is cached independently.
+    chunkSizeWarningLimit: 900,
+  },
   server: {
     port: 5173,
     proxy: {
@@ -16,5 +21,6 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: "./src/test/setup.ts",
+    exclude: ["**/node_modules/**", "**/dist/**", "e2e/**"],
   },
 });

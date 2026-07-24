@@ -7,7 +7,9 @@ test("loads the dashboard and applies an operational filter", async ({ page }) =
   await expect(page.getByText("Total orders")).toBeVisible();
   await expect(page.getByTestId("kpi-order_count")).toContainText("400");
 
-  await page.getByRole("combobox", { name: "Carrier", exact: true }).selectOption("DHL");
+  // Carrier is now a multi-select popover: open it and tick DHL.
+  await page.getByRole("button", { name: /^Carrier filter/ }).click();
+  await page.getByRole("option", { name: "DHL" }).click();
   await expect(page.getByText("1 operational filters active")).toBeVisible();
   await expect(page.getByTestId("kpi-order_count")).not.toContainText("400");
 });
@@ -20,13 +22,14 @@ test("runs diagnostics and exposes the calculation", async ({ page }) => {
   await expect(page.getByText("Underlying result").first()).toBeVisible();
 });
 
-test("runs a sparse SKU forecast with a visible confidence warning", async ({ page }) => {
+test("auto-runs a sparse SKU forecast with a visible confidence warning", async ({ page }) => {
   await page.goto("/");
+  await page.getByRole("tab", { name: "Forecast" }).click();
   await expect(page.getByText("Forecast and inventory guide")).toBeVisible();
   await page.getByLabel("Scope").selectOption("sku");
   await page.getByRole("combobox", { name: "SKU", exact: true }).fill("PAPER-0197");
   await page.getByLabel("Horizon").selectOption("2");
-  await page.getByRole("button", { name: "Run forecast" }).click();
+  // No button — the forecast recomputes automatically once a known SKU is entered.
   await expect(page.getByText(/Forecast demand for PAPER-0197/i)).toBeVisible();
   await expect(page.getByText(/Low-confidence SKU forecast/i)).toBeVisible();
 });
@@ -46,6 +49,7 @@ test("renders an AI clarification and saves query history", async ({ page }) => 
     });
   });
   await page.goto("/");
+  await page.getByRole("tab", { name: "Ask AI" }).click();
   const input = page.getByLabel("Ask a logistics analytics question");
   await input.fill("Why?");
   await page.getByRole("button", { name: "Submit question" }).click();

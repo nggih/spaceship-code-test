@@ -31,7 +31,7 @@ export function DiagnosticPanel({ filters }: { filters: Filters }) {
             <span className="text-xs font-semibold uppercase tracking-[.18em]">Delay diagnostics</span>
           </div>
           <h2 className="text-xl font-semibold">Find where delays concentrate</h2>
-          <p className="mt-2 text-sm text-[#82938e]">
+          <p className="mt-2 text-sm text-[#93a49e]">
             Compares carrier, region, warehouse, category, and promotion segments under the active filters.
           </p>
         </div>

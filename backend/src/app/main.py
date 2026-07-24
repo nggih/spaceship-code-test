@@ -83,7 +83,7 @@ async def security_headers(request: Request, call_next):
 
 
 @app.get("/api/health")
-def health(request: Request) -> dict[str, object]:
+async def health(request: Request) -> dict[str, object]:
     return {
         "status": "ok",
         "dataset_rows": len(ORDERS),
@@ -100,12 +100,12 @@ def health(request: Request) -> dict[str, object]:
 
 
 @app.get("/api/metadata")
-def get_metadata() -> dict[str, object]:
+async def get_metadata() -> dict[str, object]:
     return metadata()
 
 
 @app.post("/api/dashboard")
-def get_dashboard(query: AnalyticsQuery) -> dict[str, object]:
+async def get_dashboard(query: AnalyticsQuery) -> dict[str, object]:
     try:
         result, _ = dashboard_cache.get_or_set(
             _cache_key("dashboard", query), lambda: dashboard_payload(query)
@@ -116,7 +116,7 @@ def get_dashboard(query: AnalyticsQuery) -> dict[str, object]:
 
 
 @app.post("/api/analytics", response_model=AnalyticsResponse)
-def analytics(query: AnalyticsQuery) -> AnalyticsResponse:
+async def analytics(query: AnalyticsQuery) -> AnalyticsResponse:
     try:
         result, hit = analytics_cache.get_or_set(
             _cache_key("analytics", query), lambda: run_analytics(query)
@@ -128,7 +128,7 @@ def analytics(query: AnalyticsQuery) -> AnalyticsResponse:
 
 
 @app.post("/api/forecast", response_model=AnalyticsResponse)
-def forecast(query: ForecastQuery) -> AnalyticsResponse:
+async def forecast(query: ForecastQuery) -> AnalyticsResponse:
     try:
         result, hit = forecast_cache.get_or_set(
             _cache_key("forecast", query), lambda: run_forecast(query)
@@ -140,7 +140,7 @@ def forecast(query: ForecastQuery) -> AnalyticsResponse:
 
 
 @app.post("/api/diagnostics", response_model=AnalyticsResponse)
-def diagnostics(query: DiagnosticQuery) -> AnalyticsResponse:
+async def diagnostics(query: DiagnosticQuery) -> AnalyticsResponse:
     try:
         result, hit = diagnostic_cache.get_or_set(
             _cache_key("diagnostic", query), lambda: run_diagnostic(query)

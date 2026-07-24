@@ -7,14 +7,27 @@ This checklist consolidates the requirements from `Coding_assignment.md` and `lo
 - [x] Shared dataset and filters
 - [x] Natural-language question interface
 - [x] Validated AI orchestration rather than AI-generated answers
+- [x] No deterministic natural-language parser, text-to-SQL, or AI code execution
+- [x] Production prompt contract for metrics, dates, routing, ambiguity, and examples
 - [x] Dynamic, allowlisted chart selection
 - [x] Filters, metric, dimensions, plan, and underlying rows shown
+- [x] Per-chart query-plan and metric explainability
+- [x] Diagnostic delay-association analysis
 - [x] Read-only analytics
-- [x] Forecast values, chart, recommendation, and methodology
+- [x] Overall, category, and guarded SKU forecasts
+- [x] Forecast values, chart, recommendation, warnings, and methodology
+- [x] Query history, ambiguity UI, result caching, retries, and empty states
+- [x] shadcn/ui component structure, Tailwind CSS, and ECharts
 - [x] Public-host configuration for Cloudflare
 - [x] Docker Compose local environment
 - [x] Secret-safe configuration
+- [x] Turnstile, body limits, exact CORS, and two-layer AI throttling
+- [x] Backend tests (25 passing)
+- [x] Frontend lint, unit tests, production build, and Playwright (8 passing)
+- [x] Docker Compose smoke test on frontend port 3000
 - [x] Architecture, assumptions, limitations, and future improvements documented
-- [ ] Public repository URL added for submission
-- [ ] Live Pages and Worker URLs added for submission
-- [ ] Production Turnstile and OpenRouter secrets configured
+- [x] Public repository: https://github.com/nggih/spaceship-code-test
+- [x] Live Pages: https://logistics-intelligence-dashboard.pages.dev
+- [x] Live Worker: https://logistics-intelligence-api.nggih.workers.dev
+- [x] Production Turnstile and OpenRouter Worker secrets configured
+- [x] Dedicated OpenRouter key reports a $5 lifetime cap
