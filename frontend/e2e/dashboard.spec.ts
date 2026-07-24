@@ -202,6 +202,52 @@ test("supports a multi-turn AI conversation and sends bounded context", async ({
   await expect(page.getByText(/Ask a question, then refine it naturally/i)).toBeVisible();
 });
 
+test("keeps long conversations scrolling inside the chat panel", async ({ page }) => {
+  await page.route("**/api/ask", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        kind: "clarification",
+        message: `Long analysis response. ${"Supporting operational detail. ".repeat(220)}`,
+        suggestions: [],
+        query_plan: { intent: "clarification" },
+        meta: {
+          model: "test/long-response-model:free",
+          tool: "request_clarification",
+        },
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await page.getByRole("tab", { name: "Ask AI" }).click();
+  const input = page.getByLabel("Message Logistics AI");
+  await input.scrollIntoViewIfNeeded();
+  await input.fill("Give me a detailed operational explanation.");
+  const pageScrollBefore = await page.evaluate(() => window.scrollY);
+  await page.getByRole("button", { name: "Send message" }).click();
+
+  await expect(
+    page.getByRole("group", { name: "AI response provenance" }),
+  ).toContainText("test/long-response-model:free");
+  const conversation = page.getByRole("log", {
+    name: "Logistics AI conversation",
+  });
+  await expect
+    .poll(() =>
+      conversation.evaluate(
+        (element) => element.scrollHeight - element.clientHeight,
+      ),
+    )
+    .toBeGreaterThan(100);
+  await expect
+    .poll(() => conversation.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(0);
+  const pageScrollAfter = await page.evaluate(() => window.scrollY);
+  expect(Math.abs(pageScrollAfter - pageScrollBefore)).toBeLessThanOrEqual(2);
+});
+
 test("restores, renames, and deletes account conversation history", async ({ page }) => {
   let title = "Saved carrier analysis";
   let deleted = false;

@@ -95,7 +95,7 @@ export function AIPanel({ focusRequest = 0 }: { focusRequest?: number }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const composer = useRef<HTMLTextAreaElement>(null);
-  const endOfThread = useRef<HTMLDivElement>(null);
+  const conversationLog = useRef<HTMLDivElement>(null);
 
   async function refreshConversations() {
     try {
@@ -116,7 +116,9 @@ export function AIPanel({ focusRequest = 0 }: { focusRequest?: number }) {
   }, []);
 
   useEffect(() => {
-    endOfThread.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    const log = conversationLog.current;
+    if (!log) return;
+    log.scrollTo({ top: log.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
 
   useEffect(() => {
@@ -249,8 +251,8 @@ export function AIPanel({ focusRequest = 0 }: { focusRequest?: number }) {
 
   return (
     <Card className="overflow-hidden">
-      <div className="grid min-w-0 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="min-w-0 border-b border-white/8 bg-[#091411] lg:min-h-[720px] lg:border-b-0 lg:border-r">
+      <div className="grid min-w-0 lg:h-[720px] lg:min-h-0 lg:grid-cols-[280px_minmax(0,1fr)]">
+        <aside className="min-w-0 border-b border-white/8 bg-[#091411] lg:h-full lg:min-h-0 lg:border-b-0 lg:border-r">
           <div className="flex items-center justify-between border-b border-white/8 p-4">
             <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-[#9fb0aa]">
               <History size={15} /> History
@@ -370,7 +372,7 @@ export function AIPanel({ focusRequest = 0 }: { focusRequest?: number }) {
           </div>
         </aside>
 
-        <div className="flex min-w-0 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-col">
           <div className="flex items-center gap-2 border-b border-white/8 p-4 text-xs font-semibold uppercase tracking-[.16em] text-[#9fb0aa]">
             <Sparkles size={15} className="text-[#d9ff9f]" />
             Logistics AI
@@ -380,10 +382,11 @@ export function AIPanel({ focusRequest = 0 }: { focusRequest?: number }) {
           </div>
 
           <div
+            ref={conversationLog}
             role="log"
             aria-label="Logistics AI conversation"
             aria-live="polite"
-            className="flex max-h-[64vh] min-h-[320px] min-w-0 flex-col overflow-y-auto bg-[#091411]/50 px-4 py-6 sm:px-6 lg:max-h-none lg:min-h-0 lg:flex-1"
+            className="flex h-[64vh] max-h-[560px] min-h-[320px] min-w-0 flex-col overflow-y-auto bg-[#091411]/50 px-4 py-6 sm:px-6 lg:h-auto lg:max-h-none lg:min-h-0 lg:flex-1"
           >
             <div
               className={`mx-auto w-full max-w-5xl gap-6 ${
@@ -488,7 +491,6 @@ export function AIPanel({ focusRequest = 0 }: { focusRequest?: number }) {
                   </div>
                 </div>
               )}
-              <div ref={endOfThread} />
             </div>
           </div>
 
