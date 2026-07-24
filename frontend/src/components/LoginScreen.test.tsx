@@ -62,4 +62,18 @@ describe("LoginScreen", () => {
       await screen.findByText("Invalid username or password."),
     ).toBeInTheDocument();
   });
+
+  it("toggles password visibility without changing its value", () => {
+    render(<LoginScreen onAuthenticated={vi.fn()} />);
+    const password = screen.getByLabelText("Password");
+    fireEvent.change(password, { target: { value: "Correct-Password9!" } });
+
+    expect(password).toHaveAttribute("type", "password");
+    fireEvent.click(screen.getByRole("button", { name: "Show password" }));
+    expect(password).toHaveAttribute("type", "text");
+    expect(password).toHaveValue("Correct-Password9!");
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide password" }));
+    expect(password).toHaveAttribute("type", "password");
+  });
 });

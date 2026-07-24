@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Activity, ArrowRight, LockKeyhole, ShieldCheck } from "lucide-react";
+import {
+  Activity,
+  ArrowRight,
+  Eye,
+  EyeOff,
+  LockKeyhole,
+  ShieldCheck,
+} from "lucide-react";
 import { api } from "../lib/api";
 import type { AuthUser } from "../lib/types";
 import { Button, Card } from "./ui";
@@ -14,6 +21,7 @@ export function LoginScreen({
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(initialError);
   const [loading, setLoading] = useState(false);
 
@@ -99,15 +107,26 @@ export function LoginScreen({
             </label>
             <label className="grid gap-2 text-xs font-medium text-[#b9c7c2]">
               Password
-              <input
-                required
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                className="h-12 rounded-xl border border-white/10 bg-[#07110f] px-4 text-sm text-white outline-none transition placeholder:text-[#60736d] focus:border-[#b9f55b]/50 focus:ring-2 focus:ring-[#b9f55b]/10"
-                placeholder="Enter password"
-              />
+              <span className="relative block">
+                <input
+                  required
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="h-12 w-full rounded-xl border border-white/10 bg-[#07110f] px-4 pr-12 text-sm text-white outline-none transition placeholder:text-[#60736d] focus:border-[#b9f55b]/50 focus:ring-2 focus:ring-[#b9f55b]/10"
+                  placeholder="Enter password"
+                />
+                <button
+                  type="button"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  className="absolute inset-y-0 right-0 grid w-12 place-items-center rounded-r-xl text-[#71837d] transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#b9f55b]"
+                >
+                  {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
+              </span>
             </label>
             {error && (
               <p
