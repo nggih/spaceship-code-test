@@ -3,7 +3,6 @@ import {
   Activity,
   Box,
   CheckCircle2,
-  ChevronDown,
   Clock3,
   LayoutDashboard,
   LogOut,
@@ -300,7 +299,7 @@ export default function App() {
               </Card>
             </section>
 
-            <section className="grid gap-4 lg:grid-cols-[.9fr_1.1fr]">
+            <section>
               <Card className="p-5">
                 <div className="mb-3"><h2 className="font-semibold">Carrier delay rate</h2><p className="text-xs text-[#93a49e]">Delayed ÷ completed orders</p></div>
                 {loading || !dashboard ? <Skeleton className="h-[320px]" /> : (
@@ -309,36 +308,6 @@ export default function App() {
                     <ChartExplainability spec={dashboard.charts.carriers} />
                   </>
                 )}
-              </Card>
-              <Card className="overflow-hidden">
-                <details className="group">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#b9f55b]">
-                    <div>
-                      <h2 className="font-semibold">Underlying orders</h2>
-                      <p className="text-xs text-[#93a49e]">
-                        First 100 of {dashboard?.table.total || 0} matching records
-                      </p>
-                    </div>
-                    <span className="flex items-center gap-2 text-xs text-[#93a49e]">
-                      View data
-                      <ChevronDown size={16} className="transition group-open:rotate-180" />
-                    </span>
-                  </summary>
-                  <div className="max-h-[350px] overflow-auto border-t border-white/8">
-                    <table className="w-full min-w-[700px] text-left text-xs">
-                      <thead className="sticky top-0 bg-[#101e1b] text-[#93a49e]">
-                        <tr>{["order_id", "order_date", "carrier", "destination", "status", "category", "quantity", "value"].map((key) => <th key={key} className="px-4 py-3 font-medium">{key.replaceAll("_", " ")}</th>)}</tr>
-                      </thead>
-                      <tbody>
-                        {dashboard?.table.rows.map((row) => (
-                          <tr key={row.order_id} className="border-t border-white/5 text-[#bdcbc6] hover:bg-white/[.02]">
-                            {["order_id", "order_date", "carrier", "destination", "status", "category", "quantity", "value"].map((key) => <td key={key} className="whitespace-nowrap px-4 py-3">{String(row[key])}</td>)}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </details>
               </Card>
             </section>
 
