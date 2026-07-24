@@ -31,6 +31,13 @@ Dimension = Literal[
 ]
 TimeGrain = Literal["day", "week", "month"]
 ChartType = Literal["line", "bar", "horizontal_bar", "pie", "table"]
+ForecastMethod = Literal[
+    "auto",
+    "moving_average_3",
+    "linear_trend",
+    "exponential_smoothing",
+    "naive",
+]
 
 
 class QueryFilters(BaseModel):
@@ -76,6 +83,7 @@ class ForecastQuery(BaseModel):
     category: str | None = None
     sku: str | None = None
     horizon: int = Field(default=3, ge=1, le=6)
+    method: ForecastMethod = "auto"
 
     @model_validator(mode="after")
     def require_category(self) -> "ForecastQuery":
@@ -111,7 +119,8 @@ class AnalysisPlan(BaseModel):
     )
     filters: QueryFilters = Field(default_factory=QueryFilters)
     sort: Literal["asc", "desc"] = Field(
-        default="asc", description="Ascending for time series; ranking direction otherwise."
+        default="asc",
+        description="Ascending for time series; ranking direction otherwise.",
     )
     limit: int = Field(
         default=50,
@@ -125,6 +134,10 @@ class AnalysisPlan(BaseModel):
     category: str | None = None
     sku: str | None = None
     horizon: int | None = Field(default=None, ge=1, le=6)
+    forecast_method: ForecastMethod | None = Field(
+        default=None,
+        description="Forecast method requested by the user; null means automatic selection.",
+    )
     clarification_question: str | None = Field(default=None, max_length=300)
 
     @model_validator(mode="after")
@@ -132,6 +145,17 @@ class AnalysisPlan(BaseModel):
         if self.intent == "analytics" and not self.metric:
             raise ValueError("metric is required for analytics")
         if self.intent == "analytics":
+            if any(
+                value is not None
+                for value in (
+                    self.scope,
+                    self.category,
+                    self.sku,
+                    self.horizon,
+                    self.forecast_method,
+                )
+            ):
+                raise ValueError("analytics plans cannot contain forecast fields")
             time_dimensions = {"day", "week", "month"}
             if self.dimension in time_dimensions and self.time_grain != self.dimension:
                 raise ValueError("time dimension and time_grain must match")
@@ -146,14 +170,70 @@ class AnalysisPlan(BaseModel):
             if self.dimension is None and self.time_grain is not None:
                 raise ValueError("time_grain requires the matching time dimension")
         if self.intent == "forecast":
+            if any(
+                value is not None
+                for value in (self.metric, self.dimension, self.time_grain)
+            ):
+                raise ValueError("forecast plans cannot contain analytics fields")
             self.scope = self.scope or "overall"
-            self.horizon = self.horizon or 3
+            self.horizon = self.horizon or 1
+            self.forecast_method = self.forecast_method or "auto"
             if self.scope == "category" and not self.category:
                 raise ValueError("category is required for category forecasts")
             if self.scope == "sku" and not self.sku:
                 raise ValueError("sku is required for SKU forecasts")
+            if self.scope == "overall" and (self.category or self.sku):
+                raise ValueError("overall forecasts cannot contain category or SKU")
+            if self.scope == "category" and self.sku:
+                raise ValueError("category forecasts cannot contain SKU")
+            if self.scope == "sku" and self.category:
+                raise ValueError("SKU forecasts cannot contain category")
+
+            unsupported_filters = (
+                self.filters.start_date,
+                self.filters.end_date,
+                self.filters.carriers,
+                self.filters.regions,
+                self.filters.warehouses,
+                self.filters.statuses,
+            )
+            if any(unsupported_filters):
+                raise ValueError(
+                    "forecast plans cannot contain date, carrier, region, warehouse, "
+                    "or status filters"
+                )
+            if self.filters.categories:
+                if self.scope != "category" or self.filters.categories != [
+                    self.category
+                ]:
+                    raise ValueError(
+                        "forecast category filters must match forecast scope"
+                    )
+                self.filters.categories = []
+            if self.filters.skus:
+                if self.scope != "sku" or self.filters.skus != [self.sku]:
+                    raise ValueError("forecast SKU filters must match forecast scope")
+                self.filters.skus = []
+        if self.intent == "diagnostic" and any(
+            value is not None
+            for value in (
+                self.metric,
+                self.dimension,
+                self.time_grain,
+                self.scope,
+                self.category,
+                self.sku,
+                self.horizon,
+                self.forecast_method,
+            )
+        ):
+            raise ValueError(
+                "diagnostic plans can contain filters but not analytics or forecast fields"
+            )
         if self.intent == "clarification" and not self.clarification_question:
-            raise ValueError("clarification_question is required for ambiguous requests")
+            raise ValueError(
+                "clarification_question is required for ambiguous requests"
+            )
         return self
 
 

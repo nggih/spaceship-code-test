@@ -4,6 +4,7 @@ import type {
   ConversationTurn,
   DashboardData,
   Filters,
+  ForecastMethod,
   Metadata,
 } from "./types";
 
@@ -87,6 +88,7 @@ export const api = {
     scope: "overall" | "category" | "sku",
     selection: string | null,
     horizon: number,
+    method: ForecastMethod = "auto",
   ) =>
     request<AnalyticsResult>("/api/forecast", {
       method: "POST",
@@ -95,6 +97,7 @@ export const api = {
         category: scope === "category" ? selection : null,
         sku: scope === "sku" ? selection : null,
         horizon,
+        method,
       }),
     }),
   diagnostics: (filters: Filters) =>

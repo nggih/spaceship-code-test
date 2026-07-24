@@ -10,7 +10,13 @@ from app.diagnostic import run_diagnostic
 from app.embedded_data import CSV_DATA
 from app.forecast import run_forecast
 from app.main import app
-from app.models import AnalyticsQuery, DiagnosticQuery, ForecastQuery, QueryFilters
+from app.models import (
+    AnalysisPlan,
+    AnalyticsQuery,
+    DiagnosticQuery,
+    ForecastQuery,
+    QueryFilters,
+)
 
 client = TestClient(app)
 
@@ -69,9 +75,7 @@ def test_month_grouping_zero_fills_requested_range():
 
 def test_carrier_delay_rate_ranking():
     result = run_analytics(
-        AnalyticsQuery(
-            metric="delay_rate", dimension="carrier", sort="desc"
-        )
+        AnalyticsQuery(metric="delay_rate", dimension="carrier", sort="desc")
     )
     values = [row["value"] for row in result.chart.rows]
     assert values == sorted(values, reverse=True)
@@ -119,7 +123,47 @@ def test_forecast_overall_and_category():
     assert len(overall.table["rows"]) == 4
     assert len(category.table["rows"]) == 2
     assert all(row["forecast"] >= 0 for row in overall.table["rows"])
-    assert overall.meta["inventory_recommendation"] >= overall.table["rows"][0]["forecast"]
+    assert (
+        overall.meta["inventory_recommendation"] >= overall.table["rows"][0]["forecast"]
+    )
+    assert overall.meta["method"] in {
+        "moving_average_3",
+        "linear_trend",
+        "exponential_smoothing",
+        "naive",
+    }
+
+
+def test_forecast_auto_selects_lowest_mae_without_duplicate_boundary_month():
+    result = run_forecast(ForecastQuery(scope="overall", horizon=6, method="auto"))
+    scores = result.meta["candidate_scores"]
+    selected = next(score for score in scores if score["selected"])
+    assert selected["mae"] == min(score["mae"] for score in scores)
+    assert selected["method"] == result.meta["method"]
+    assert result.meta["validation_periods"] == 9
+
+    labels = [row["label"] for row in result.chart.rows]
+    assert len(labels) == len(set(labels))
+    boundary = result.chart.rows[11]
+    assert boundary["label"] == "2025-12"
+    assert boundary["historical"] == boundary["forecast"]
+
+
+@pytest.mark.parametrize(
+    "method",
+    [
+        "moving_average_3",
+        "linear_trend",
+        "exponential_smoothing",
+        "naive",
+    ],
+)
+def test_forecast_supports_each_approved_method(method):
+    result = run_forecast(ForecastQuery(scope="overall", horizon=2, method=method))
+    assert result.meta["method"] == method
+    assert result.meta["requested_method"] == method
+    assert len(result.table["rows"]) == 2
+    assert all(row["forecast"] >= 0 for row in result.table["rows"])
 
 
 def test_sparse_sku_forecast_is_supported_with_low_confidence():
@@ -128,14 +172,45 @@ def test_sparse_sku_forecast_is_supported_with_low_confidence():
     assert len(result.table["rows"]) == 2
     assert result.meta["confidence"] == "low"
     assert result.meta["safety_stock_percent"] == 30
-    assert any("Low-confidence SKU forecast" in warning for warning in result.explainability.warnings)
+    assert any(
+        "Low-confidence SKU forecast" in warning
+        for warning in result.explainability.warnings
+    )
 
 
 def test_unknown_forecast_category():
     with pytest.raises(ValueError, match="Unknown category"):
-        run_forecast(
-            ForecastQuery(scope="category", category="NOT_REAL", horizon=2)
+        run_forecast(ForecastQuery(scope="category", category="NOT_REAL", horizon=2))
+
+
+def test_forecast_horizon_bounds_are_rejected():
+    for horizon in (0, 7):
+        response = client.post(
+            "/api/forecast",
+            json={"scope": "overall", "horizon": horizon, "method": "auto"},
         )
+        assert response.status_code == 422
+
+
+def test_forecast_plan_rejects_unsupported_segmentation_and_normalizes_duplicate_sku():
+    with pytest.raises(ValueError, match="forecast plans cannot contain"):
+        AnalysisPlan(
+            intent="forecast",
+            scope="overall",
+            horizon=1,
+            forecast_method="auto",
+            filters=QueryFilters(regions=["EU"]),
+        )
+
+    plan = AnalysisPlan(
+        intent="forecast",
+        scope="sku",
+        sku=ORDERS[0].sku,
+        horizon=2,
+        forecast_method="auto",
+        filters=QueryFilters(skus=[ORDERS[0].sku]),
+    )
+    assert plan.filters.skus == []
 
 
 def test_diagnostic_ranks_delay_associations_and_warns_about_causality():
@@ -144,7 +219,10 @@ def test_diagnostic_ranks_delay_associations_and_warns_about_causality():
     assert result.table["rows"]
     lifts = [row["lift_vs_overall"] for row in result.table["rows"]]
     assert lifts == sorted(lifts, reverse=True)
-    assert any("do not prove causation" in warning for warning in result.explainability.warnings)
+    assert any(
+        "do not prove causation" in warning
+        for warning in result.explainability.warnings
+    )
     assert result.chart.query_plan == result.query_plan
 
 

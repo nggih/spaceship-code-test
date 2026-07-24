@@ -5,12 +5,80 @@ import { Badge, Card } from "./ui";
 
 export function ResultPanel({ result }: { result: AnalyticsResult }) {
   const columns = result.table.columns || Object.keys(result.table.rows[0] || {});
+  const candidateScores = Array.isArray(result.meta.candidate_scores)
+    ? result.meta.candidate_scores.filter(
+        (item): item is {
+          method: string;
+          label: string;
+          mae: number;
+          selected: boolean;
+        } =>
+          Boolean(item) &&
+          typeof item === "object" &&
+          typeof item.method === "string" &&
+          typeof item.label === "string" &&
+          typeof item.mae === "number" &&
+          typeof item.selected === "boolean",
+      )
+    : [];
   return (
     <div className="grid gap-4">
       <div className="rounded-xl border border-[#b9f55b]/15 bg-[#b9f55b]/5 p-4 text-sm leading-6 text-[#e5f0ec]">
         {result.answer}
       </div>
-      {result.chart.rows.length > 0 && <LazyChart spec={result.chart} height={280} />}
+      {result.chart.type !== "table" && result.chart.rows.length > 0 && (
+        <LazyChart spec={result.chart} height={280} />
+      )}
+      {candidateScores.length > 0 && (
+        <div className="rounded-xl border border-[#49dcb1]/15 bg-[#49dcb1]/5 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-[#dce9e4]">Forecast model selection</p>
+              <p className="mt-1 text-xs leading-5 text-[#93a49e]">
+                Expanding-window one-step backtest · lower MAE is better
+              </p>
+            </div>
+            <Badge>
+              {String(result.meta.requested_method) === "auto"
+                ? "Auto selected"
+                : "Manually selected"}
+            </Badge>
+          </div>
+          <div className="mt-4 overflow-auto">
+            <table className="w-full min-w-[430px] text-left text-xs">
+              <thead className="text-[#93a49e]">
+                <tr>
+                  <th className="pb-2 font-medium">Method</th>
+                  <th className="pb-2 text-right font-medium">Validation MAE</th>
+                  <th className="pb-2 text-right font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {candidateScores.map((score) => (
+                  <tr key={score.method} className="border-t border-white/7">
+                    <td className="py-2.5 text-[#cbd8d3]">{score.label}</td>
+                    <td className="py-2.5 text-right tabular-nums text-[#cbd8d3]">
+                      {score.mae.toFixed(2)}
+                    </td>
+                    <td className="py-2.5 text-right">
+                      {score.selected ? (
+                        <span className="text-[#b9f55b]">Selected</span>
+                      ) : (
+                        <span className="text-[#6f827b]">Compared</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-3 text-xs text-[#93a49e]">
+            Inventory guide: {String(result.meta.inventory_recommendation)} units ·{" "}
+            {String(result.meta.safety_stock_percent)}% safety stock ·{" "}
+            {String(result.meta.supporting_orders)} supporting orders
+          </p>
+        </div>
+      )}
       <details className="group rounded-xl border border-white/8 bg-black/10">
         <summary className="flex cursor-pointer list-none items-center gap-2 p-3 text-sm font-semibold text-[#c7d3cf]">
           <Braces size={15} /> Structured interpretation

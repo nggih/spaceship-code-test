@@ -42,6 +42,7 @@ describe("API client", () => {
       category: null,
       sku: "PAPER-0197",
       horizon: 2,
+      method: "auto",
     });
     fetchMock.mockRestore();
   });

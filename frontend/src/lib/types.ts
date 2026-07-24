@@ -53,6 +53,13 @@ export type ConversationTurn = {
   content: string;
 };
 
+export type ForecastMethod =
+  | "auto"
+  | "moving_average_3"
+  | "linear_trend"
+  | "exponential_smoothing"
+  | "naive";
+
 export type Metadata = {
   row_count: number;
   date_range: { min: string; max: string };

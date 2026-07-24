@@ -31,7 +31,13 @@ test("auto-runs a sparse SKU forecast with a visible confidence warning", async 
   await page.getByLabel("Horizon").selectOption("2");
   // No button — the forecast recomputes automatically once a known SKU is entered.
   await expect(page.getByText(/Forecast demand for PAPER-0197/i)).toBeVisible();
+  await expect(page.getByText("Forecast model selection")).toBeVisible();
+  await expect(page.getByText("Auto selected")).toBeVisible();
   await expect(page.getByText(/Low-confidence SKU forecast/i)).toBeVisible();
+
+  await page.getByLabel("Method").selectOption("linear_trend");
+  await expect(page.getByText("Manually selected")).toBeVisible();
+  await expect(page.getByText(/ordinary least-squares linear trend/i).first()).toBeVisible();
 });
 
 test("supports a multi-turn AI conversation and sends bounded context", async ({ page }) => {

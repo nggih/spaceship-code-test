@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { TrendingUp } from "lucide-react";
 import { api } from "../lib/api";
-import type { AnalyticsResult } from "../lib/types";
+import type { AnalyticsResult, ForecastMethod } from "../lib/types";
 import { Card, Skeleton } from "./ui";
 import { ResultPanel } from "./ResultPanel";
 
@@ -10,6 +10,7 @@ export function ForecastPanel({ categories, skus }: { categories: string[]; skus
   const [category, setCategory] = useState(categories[0] || "");
   const [sku, setSku] = useState(skus[0] || "");
   const [horizon, setHorizon] = useState(3);
+  const [method, setMethod] = useState<ForecastMethod>("auto");
   const [result, setResult] = useState<AnalyticsResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -25,7 +26,7 @@ export function ForecastPanel({ categories, skus }: { categories: string[]; skus
       setLoading(true);
       setError("");
       api
-        .forecast(scope, selection, horizon)
+        .forecast(scope, selection, horizon, method)
         .then((response) => {
           if (active) setResult(response);
         })
@@ -40,7 +41,7 @@ export function ForecastPanel({ categories, skus }: { categories: string[]; skus
       active = false;
       window.clearTimeout(timer);
     };
-  }, [scope, category, sku, horizon, skuReady]);
+  }, [scope, category, sku, horizon, method, skuReady]);
 
   return (
     <Card className="overflow-hidden">
@@ -91,6 +92,20 @@ export function ForecastPanel({ categories, skus }: { categories: string[]; skus
             Horizon
             <select className="control" value={horizon} onChange={(e) => setHorizon(Number(e.target.value))}>
               {[1, 2, 3, 4, 5, 6].map((value) => <option key={value} value={value}>{value} months</option>)}
+            </select>
+          </label>
+          <label className="grid gap-1 text-xs text-[#9db0aa]">
+            Method
+            <select
+              className="control"
+              value={method}
+              onChange={(event) => setMethod(event.target.value as ForecastMethod)}
+            >
+              <option value="auto">Auto · lowest validation MAE</option>
+              <option value="moving_average_3">3-month moving average</option>
+              <option value="exponential_smoothing">Exponential smoothing</option>
+              <option value="linear_trend">Linear trend</option>
+              <option value="naive">Last-observation baseline</option>
             </select>
           </label>
         </div>

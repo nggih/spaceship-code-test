@@ -217,7 +217,8 @@ async def ask(
                 scope=plan.scope or "overall",
                 category=plan.category,
                 sku=plan.sku,
-                horizon=plan.horizon or 3,
+                horizon=plan.horizon or 1,
+                method=plan.forecast_method or "auto",
             )
             result, cache_hit = forecast_cache.get_or_set(
                 _cache_key("forecast", forecast_query),

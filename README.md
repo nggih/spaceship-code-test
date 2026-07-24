@@ -11,6 +11,7 @@ An AI-powered logistics analytics dashboard built for the coding assignment in [
 - Delay-driver diagnostics with explicit correlation/causation warnings
 - Structured query plans and explainability
 - Overall, category, and guarded low-confidence SKU forecasts
+- Automatic backtesting across four approved forecasting methods, with manual override
 - Inventory guidance with explicit methodology
 - Persistent conversational AI thread, result caching, ambiguity handling, and retry states
 - Docker Compose local environment
@@ -147,7 +148,9 @@ The late/on-time definitions are proxies because the dataset does not include a 
 
 ## Forecasting
 
-The forecast aggregates monthly quantity, fills absent months with zero, and fits an ordinary least-squares linear trend using pure Python. Forecast values are clamped to zero and rounded upward. The inventory recommendation adds 15% safety stock to the next-month forecast.
+The forecast aggregates monthly quantity and fills absent months with zero. Automatic mode compares a 3-month moving average, ordinary least-squares linear trend, simple exponential smoothing, and a last-observation baseline using expanding-window one-step mean absolute error (MAE). The lowest-MAE candidate is selected, while the UI also permits an explicit method override.
+
+Forecast values are clamped to zero and rounded upward. The chart uses one shared boundary point between historical and forecast series, and the inventory recommendation adds 15% safety stock to the next-month forecast. The result displays every candidate score, the selected method, validation-period count, supporting-order count, and methodology limitations.
 
 Overall, category, and SKU forecasts are supported. Sparse SKU forecasts are clearly marked low-confidence, include their supporting-order count, and use 30% safety stock because 313 of 355 SKUs occur only once. They are planning signals, not claims of statistical precision.
 
@@ -176,6 +179,7 @@ cd backend
 uv sync
 uv run pywrangler secret put OPENROUTER_API_KEY
 uv run pywrangler secret put TURNSTILE_SECRET_KEY
+uv run pywrangler secret put AI_SESSION_SECRET
 uv run pywrangler deploy
 ```
 
@@ -194,9 +198,9 @@ The deployed Pages origin must exactly match the backend `ALLOWED_ORIGINS`.
 
 ## Testing
 
-Backend tests cover dataset invariants, KPIs, filter combinations, time grouping, delay ranking, diagnostics, all forecast scopes, cache behavior, schema rejection, AI ambiguity and failover, and both limiter paths.
+Backend tests cover dataset invariants, KPIs, filter combinations, time grouping, delay ranking, diagnostics, every forecast scope and method, automatic MAE selection, boundary-month continuity, horizon validation, intent-specific plan rejection, cache behavior, AI ambiguity and failover, and both limiter paths.
 
-Frontend unit tests cover API mapping, session rotation, validation errors, and empty states. Playwright runs the real React/FastAPI stack on desktop and mobile Chromium, exercising filters, diagnostics, SKU forecasts, multi-turn context, clarification UI, and conversation reset.
+Frontend unit tests cover API mapping, session rotation, validation errors, empty states, and forecast-method evidence. Playwright runs the real React/FastAPI stack on desktop and mobile Chromium, exercising filters, diagnostics, automatic and manual SKU forecasts, multi-turn context, clarification UI, and conversation reset.
 
 ```bash
 cd backend && uv run pytest
@@ -224,9 +228,9 @@ cd frontend && npm run lint && npm test && npm run build && npm run test:e2e
 - Add promised delivery/SLA fields and carrier service levels.
 - Back analytics with D1 or an analytical store for larger datasets.
 - Add Durable Objects for an exact globally consistent 10-minute window and shared query history.
-- Evaluate forecasting methods with rolling backtests and confidence intervals.
+- Add longer demand history, prediction intervals, and seasonal methods once at least two annual cycles are available.
 - Add server-side semantic-plan caching after privacy and invalidation review.
 
 ## AI usage disclosure
 
-This project was built with AI coding assistants (Anthropic Claude Code and OpenAI Codex) used for scaffolding, implementation, tests, and documentation. All architecture, data-correctness decisions, and final code were reviewed and verified by the author. The AI-orchestration layer of the running application uses an OpenRouter-hosted model strictly to interpret natural-language questions into a validated query plan; it never computes results or generates answers directly.
+I used ChatGPT and Codex as collaborative tools throughout the task. I actively directed the process, discussed the approach in depth, evaluated alternatives, reviewed the generated output, and made the final implementation and design decisions. The submitted work reflects my own understanding and judgment, with AI used to accelerate development and support problem-solving.
