@@ -1,8 +1,10 @@
-# Cloudflare Access Deployment
+# Optional Cloudflare Access Deployment
 
-The application uses Cloudflare Access for browser login and Cloudflare D1 for
-user-owned conversation history. Reviewer credentials must be delivered
-privately with the submission and must never be committed to this repository.
+The application uses its signed reviewer-credential session by default.
+Cloudflare Access is also supported as an optional enterprise identity layer.
+When configured, a valid Access identity takes precedence over the credential
+cookie. Reviewer credentials must be delivered privately and must never be
+committed to this repository.
 
 ## Request flow
 

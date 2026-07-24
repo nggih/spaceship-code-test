@@ -21,6 +21,8 @@ This checklist consolidates the requirements from `Coding_assignment.md` and `lo
 - [x] Four approved forecast methods with automatic rolling-MAE selection and manual override
 - [x] Visible forecast-method comparison, supporting data, and validation limitations
 - [x] D1-backed, account-owned conversation history with restore, rename, and delete
+- [x] Reviewer login screen with signed HttpOnly cookie and logout
+- [x] Login throttling, generic credential errors, and anonymous API rejection
 - [x] Cloudflare Access JWT verification and cross-user ownership enforcement
 - [x] shadcn/ui component structure, Tailwind CSS, and ECharts
 - [x] Public-host configuration for Cloudflare
@@ -28,13 +30,13 @@ This checklist consolidates the requirements from `Coding_assignment.md` and `lo
 - [x] Secret-safe configuration
 - [x] Optional first-AI-request Turnstile; authenticated sessions do not require it
 - [x] Body/history limits, exact CORS, and two-layer AI throttling
-- [x] Backend tests (38 passing)
-- [x] Frontend lint, unit tests (7 passing), production build, and Playwright (10 passing)
+- [x] Backend tests (40 passing)
+- [x] Frontend lint, unit tests (9 passing), production build, and Playwright (12 passing)
 - [x] Docker Compose smoke test on frontend port 3000
 - [x] Architecture, assumptions, limitations, and future improvements documented
 - [x] Public repository: https://github.com/nggih/spaceship-code-test
 - [x] Live Pages: https://logistics-intelligence-dashboard.pages.dev
 - [x] Live Worker: https://logistics-intelligence-api.nggih.workers.dev
 - [x] Production OpenRouter Worker secret configured
-- [ ] Cloudflare Access policy, reviewer identity, and Worker audience variables configured
+- [ ] Reviewer credentials and independent session secret uploaded to the Worker
 - [x] Dedicated OpenRouter key reports a $5 lifetime cap

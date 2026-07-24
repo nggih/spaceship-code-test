@@ -13,7 +13,7 @@ import {
   TriangleAlert,
   UserRound,
 } from "lucide-react";
-import { api } from "./lib/api";
+import { ApiError, api } from "./lib/api";
 import type { AuthUser, DashboardData, Filters, Metadata } from "./lib/types";
 import { AIPanel } from "./components/AIPanel";
 import { ChartExplainability } from "./components/ChartExplainability";
@@ -21,6 +21,7 @@ import { DiagnosticPanel } from "./components/DiagnosticPanel";
 import { FilterBar } from "./components/FilterBar";
 import { ForecastPanel } from "./components/ForecastPanel";
 import { LazyChart } from "./components/LazyChart";
+import { LoginScreen } from "./components/LoginScreen";
 import { Badge, Button, Card, Skeleton } from "./components/ui";
 
 const emptyFilters: Filters = {
@@ -56,17 +57,43 @@ export default function App() {
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [health, setHealth] = useState<{ ai_configured: boolean } | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    api.me()
+      .then((identity) => setUser(identity))
+      .catch((caught) => {
+        if (!(caught instanceof ApiError && caught.status === 401)) {
+          setAuthError(
+            caught instanceof Error ? caught.message : "Unable to check authentication.",
+          );
+        }
+      })
+      .finally(() => setAuthLoading(false));
+  }, []);
+
+  useEffect(() => {
+    const unauthorized = () => {
+      setUser(null);
+      setMetadata(null);
+      setDashboard(null);
+      setAuthError("Your session expired. Please sign in again.");
+    };
+    window.addEventListener("logistics:unauthorized", unauthorized);
+    return () => window.removeEventListener("logistics:unauthorized", unauthorized);
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
     setError("");
-    Promise.all([api.metadata(), api.health(), api.me()])
-      .then(([meta, status, identity]) => {
+    Promise.all([api.metadata(), api.health()])
+      .then(([meta, status]) => {
         setMetadata(meta);
         setHealth(status);
-        setUser(identity);
         setFilters((current) => ({
           ...current,
           start_date: meta.date_range.min,
@@ -74,7 +101,7 @@ export default function App() {
         }));
       })
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Unable to load metadata."));
-  }, [reloadKey]);
+  }, [reloadKey, user]);
 
   useEffect(() => {
     if (!metadata) return;
@@ -99,6 +126,46 @@ export default function App() {
     }
     return count;
   }, [filters, metadata]);
+
+  async function signOut() {
+    if (user?.logout_url) {
+      window.location.assign(user.logout_url);
+      return;
+    }
+    try {
+      await api.logout();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to sign out.");
+      return;
+    }
+    setUser(null);
+    setMetadata(null);
+    setDashboard(null);
+    setTab("dashboard");
+  }
+
+  if (authLoading) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-[#07110f] text-[#93a49e]">
+        <div className="flex items-center gap-3 text-sm">
+          <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-[#b9f55b]" />
+          Checking secure session…
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <LoginScreen
+        initialError={authError}
+        onAuthenticated={(identity) => {
+          setAuthError("");
+          setUser(identity);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#07110f] text-[#edf4f1]">
@@ -130,13 +197,14 @@ export default function App() {
                 <span className="max-w-48 truncate">{user.email}</span>
               </span>
             )}
-            {user?.logout_url && (
-              <a
-                href={user.logout_url}
+            {user && (
+              <button
+                type="button"
+                onClick={() => void signOut()}
                 className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-[#93a49e] hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b9f55b]"
               >
                 <LogOut size={13} /> Sign out
-              </a>
+              </button>
             )}
           </div>
         </div>

@@ -1,9 +1,14 @@
 from fastapi.testclient import TestClient
 
-from app.auth import AuthUser, _validate_claims
+from app.auth import (
+    AuthUser,
+    _validate_claims,
+    create_credential_session,
+    verify_credential_session,
+)
 from app.main import app
 from app.models import AnalysisPlan
-from app.security import _requests
+from app.security import _login_requests, _requests
 
 
 def test_access_claim_validation():
@@ -23,6 +28,62 @@ def test_access_claim_validation():
     assert user == AuthUser(
         subject="identity-123", email="reviewer@example.com", name=None
     )
+
+
+def test_credential_session_is_signed_and_expires():
+    token = create_credential_session("reviewer", "session-secret", now=1_000)
+    assert verify_credential_session(
+        token, "session-secret", "reviewer", now=1_001
+    ) == AuthUser(
+        subject="credentials:2d70999ae1805e4bcef9b4ab3a4b827f578c61740f30076fcdc35c7ae7f586b3",
+        email="reviewer@local.account",
+        name="reviewer",
+    )
+    assert verify_credential_session(token, "wrong-secret", "reviewer", now=1_001) is None
+    assert (
+        verify_credential_session(token, "session-secret", "other", now=1_001)
+        is None
+    )
+    assert (
+        verify_credential_session(token, "session-secret", "reviewer", now=29_800)
+        is None
+    )
+
+
+def test_login_cookie_protects_api_and_logout_revokes_browser_session(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("USERNAME", "reviewer")
+    monkeypatch.setenv("PASSWORD", "correct-password")
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "independent-session-secret")
+    monkeypatch.setenv("HISTORY_DB_PATH", str(tmp_path / "history.db"))
+    _login_requests.clear()
+    client = TestClient(app)
+
+    assert client.get("/api/auth/me").status_code == 401
+    invalid = client.post(
+        "/api/auth/login",
+        json={"username": "reviewer", "password": "incorrect"},
+    )
+    assert invalid.status_code == 401
+    assert invalid.json()["detail"] == "Invalid username or password."
+
+    login = client.post(
+        "/api/auth/login",
+        json={"username": "reviewer", "password": "correct-password"},
+    )
+    assert login.status_code == 200
+    assert login.json()["name"] == "reviewer"
+    cookie = login.headers["set-cookie"].lower()
+    assert "httponly" in cookie
+    assert "samesite=lax" in cookie
+    assert client.get("/api/auth/me").status_code == 200
+    assert client.get("/api/conversations").status_code == 200
+
+    logout = client.post("/api/auth/logout")
+    assert logout.status_code == 204
+    assert client.get("/api/auth/me").status_code == 401
 
 
 def test_conversation_lifecycle_is_persistent_and_user_owned(monkeypatch, tmp_path):

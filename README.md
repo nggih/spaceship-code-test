@@ -25,10 +25,11 @@ The two supplied specifications are consistent. [`Coding_assignment.md`](docs/Co
 - API health: <https://logistics-intelligence-api.nggih.workers.dev/api/health>
 - Public repository: <https://github.com/nggih/spaceship-code-test>
 
-The production architecture uses Cloudflare Access login, Worker-side Access
-JWT verification, account-scoped D1 history, exact-origin CORS, Worker secrets,
-and a Cloudflare Rate Limiting binding. Reviewer credentials are distributed
-privately, never committed.
+The production architecture uses a backend-verified reviewer login, a signed
+HttpOnly session cookie, account-scoped D1 history, exact-origin requests,
+encrypted Worker secrets, and a Cloudflare Rate Limiting binding. Optional
+Cloudflare Access JWT validation is also supported. Reviewer credentials are
+distributed privately, never committed.
 
 ## Quick start with Docker Compose
 
@@ -52,10 +53,9 @@ For example, if another local service owns port 8000:
 BACKEND_PORT=18000 FRONTEND_PORT=3000 docker compose up --build
 ```
 
-Dashboard analytics and forecasting work locally without external credentials.
-Docker assigns the configurable `DEV_AUTH_EMAIL` identity and persists its
-history in a named volume. Add `OPENROUTER_API_KEY` to `.env` to enable
-natural-language interpretation.
+Set `USERNAME` and `PASSWORD` in the ignored `.env` file to exercise the real
+login flow. Docker persists that account's history in a named volume. Add
+`OPENROUTER_API_KEY` to enable natural-language interpretation.
 
 ## Local development with uv
 
@@ -88,10 +88,13 @@ npm run test:e2e
 | `OPENROUTER_MODEL` | Backend | Defaults to `openrouter/free` |
 | `TURNSTILE_SECRET_KEY` | Secret, backend only | Server-side challenge verification |
 | `AI_SESSION_SECRET` | Secret, backend only | Signs one-hour, IP-bound AI session tokens |
+| `USERNAME` | Secret, backend only | Dedicated reviewer login |
+| `PASSWORD` | Secret, backend only | Dedicated reviewer password |
+| `AUTH_SESSION_SECRET` | Secret, backend only | Independently signs eight-hour login cookies |
 | `VITE_TURNSTILE_SITE_KEY` | Public | Browser Turnstile widget |
 | `VITE_API_URL` | Public | Production Worker base URL; blank uses same origin/proxy |
-| `ACCESS_TEAM_DOMAIN` | Backend | Cloudflare Access issuer, configured on the Worker |
-| `ACCESS_AUD` | Backend | Pages Access application audience |
+| `ACCESS_TEAM_DOMAIN` | Backend, optional | Cloudflare Access issuer |
+| `ACCESS_AUD` | Backend, optional | Cloudflare Access application audience |
 | `DEV_AUTH_EMAIL` | Local backend | Explicit Docker development identity |
 | `HISTORY_DB_PATH` | Local backend | SQLite history path; D1 is used in the Worker |
 | `TURNSTILE_AFTER_LOGIN` | Backend | Optional extra first-AI-request challenge; defaults off |
@@ -110,7 +113,7 @@ React dashboard
    ├── forecast controls ───────────────→ forecast tool
    └── conversational question + bounded prior turns
           ↓
-       Cloudflare Access identity → per-user rate limit
+       signed reviewer session → per-user rate limit
           ↓
        OpenRouter native function-tool selection
           ↓
@@ -176,15 +179,15 @@ Use a dedicated OpenRouter inference key:
 4. Use `openrouter/free`; validation may fall back only to another free model.
 5. Store the key only as a Worker secret.
 
-The deployed key reports a $5 lifetime cap. Cloudflare Access performs browser
-login before the application loads. The Worker independently validates the
-Access JWT signature, issuer, audience, expiry, and subject before serving
-analytics or history. Turnstile can remain enabled as an additional
-first-AI-request challenge with `TURNSTILE_AFTER_LOGIN=true`, but is disabled
-for authenticated reviewer sessions by default.
+The deployed key reports a $5 lifetime cap. The Worker verifies credentials
+with constant-time comparisons and returns an eight-hour HMAC-signed,
+HttpOnly, Secure, SameSite cookie. Login attempts are throttled by IP.
+Turnstile can remain enabled as an additional first-AI-request challenge with
+`TURNSTILE_AFTER_LOGIN=true`, but is disabled for authenticated reviewer
+sessions by default.
 
 Every message passes Cloudflare's distributed 5-request/60-second burst limiter
-plus a 5-request/10-minute warm-isolate window keyed by the authenticated Access
+plus a 5-request/10-minute warm-isolate window keyed by the authenticated user
 subject. Questions and conversation turns are limited to 500 characters,
 server-sourced context is capped at eight alternating turns, bodies over 16 KiB
 are rejected, model output is capped, upstream calls time out, and secrets/full
@@ -200,8 +203,9 @@ Python Workers are currently beta. The implementation avoids pandas and native s
 cd backend
 uv sync
 uv run pywrangler secret put OPENROUTER_API_KEY
-uv run pywrangler secret put ACCESS_TEAM_DOMAIN
-uv run pywrangler secret put ACCESS_AUD
+uv run pywrangler secret put USERNAME
+uv run pywrangler secret put PASSWORD
+openssl rand -hex 32 | uv run pywrangler secret put AUTH_SESSION_SECRET
 npx wrangler d1 migrations apply logistics-intelligence-history --remote
 uv run pywrangler deploy
 ```
@@ -218,15 +222,17 @@ The deployed Pages project is `logistics-intelligence-dashboard`. For another ac
 - `VITE_API_URL` left blank so `/api/*` uses the authenticated Pages Function proxy
 
 The deployed Pages origin must exactly match the backend `ALLOWED_ORIGINS`.
-Complete the policy and credential steps in
-[`docs/CLOUDFLARE_ACCESS.md`](docs/CLOUDFLARE_ACCESS.md) before deployment.
+Complete the credential steps in
+[`docs/AUTHENTICATION.md`](docs/AUTHENTICATION.md) before deployment. Cloudflare
+Access remains an optional additional layer documented in
+[`docs/CLOUDFLARE_ACCESS.md`](docs/CLOUDFLARE_ACCESS.md).
 
 ### Conversation persistence
 
 Cloudflare D1 stores conversation summaries, user/assistant messages, and the
 validated analytical result contract needed to restore charts and tables.
 Conversation list, read, rename, and delete operations are scoped by the
-immutable Access `sub` claim. Docker uses the same repository through SQLite in
+immutable authenticated subject. Docker uses the same repository through SQLite in
 the `backend_state` volume, so local sessions survive container recreation.
 
 ## Testing
@@ -237,8 +243,8 @@ Frontend unit tests cover API mapping, validation errors, empty states, and
 forecast-method evidence. Playwright runs the real React/FastAPI stack on
 desktop and mobile Chromium, exercising filters, diagnostics, automatic and
 manual SKU forecasts, multi-turn context, clarification UI, and conversation
-reset. Backend tests additionally verify Access claims and cross-user history
-isolation.
+reset. Backend tests additionally verify credential-cookie security, Access
+claims, and cross-user history isolation.
 
 ```bash
 cd backend && uv run pytest

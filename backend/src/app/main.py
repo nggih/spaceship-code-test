@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import os
 import uuid
 from typing import Annotated
@@ -8,7 +9,14 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 
 from .ai import DEFAULT_MODEL, interpret_question
 from .analytics import dashboard_payload, run_analytics
-from .auth import AuthUser, require_user
+from .auth import (
+    AUTH_COOKIE_NAME,
+    AUTH_SESSION_TTL_SECONDS,
+    AuthUser,
+    create_credential_session,
+    credential_subject,
+    require_user,
+)
 from .cache import analytics_cache, dashboard_cache, diagnostic_cache, forecast_cache
 from .data import DATA_MAX_DATE, DATA_MIN_DATE, ORDERS, metadata
 from .diagnostic import run_diagnostic
@@ -23,8 +31,10 @@ from .models import (
     ConversationUpdate,
     DiagnosticQuery,
     ForecastQuery,
+    LoginRequest,
 )
 from .security import (
+    check_login_rate_limit,
     check_rate_limit,
     create_ai_session,
     verify_ai_session,
@@ -89,10 +99,17 @@ async def security_headers(request: Request, call_next):
             "Content-Type, X-AI-Session, X-Dev-User"
         )
         response.headers["Access-Control-Expose-Headers"] = "X-AI-Session"
+        response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Vary"] = "Origin"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if request.url.path.startswith(("/api/auth", "/api/conversations")):
+        response.headers["Cache-Control"] = "no-store"
+    if _binding(request, "ENVIRONMENT", "development") == "production":
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains"
+        )
     response.headers["X-Request-ID"] = request.headers.get(
         "X-Request-ID", str(uuid.uuid4())
     )
@@ -312,17 +329,82 @@ async def ask(
     return result
 
 
-@app.get("/api/auth/me")
-async def auth_me(request: Request, user: CurrentUser) -> dict[str, object]:
+def _identity_payload(request: Request, user: AuthUser) -> dict[str, object]:
     team_domain = (_binding(request, "ACCESS_TEAM_DOMAIN") or "").rstrip("/")
+    uses_access = bool(team_domain and not user.subject.startswith("credentials:"))
     return {
         "id": user.subject,
         "email": user.email,
         "name": user.name,
         "logout_url": (
-            f"{team_domain}/cdn-cgi/access/logout" if team_domain else None
+            f"{team_domain}/cdn-cgi/access/logout" if uses_access else None
         ),
     }
+
+
+@app.post("/api/auth/login")
+async def auth_login(
+    payload: LoginRequest, request: Request, response: Response
+) -> dict[str, object]:
+    client_ip = request.headers.get("CF-Connecting-IP") or (
+        request.client.host if request.client else "unknown"
+    )
+    await check_login_rate_limit(
+        client_ip, binding=_runtime_binding(request, "AI_RATE_LIMITER")
+    )
+    configured_username = _binding(request, "USERNAME")
+    configured_password = _binding(request, "PASSWORD")
+    environment = _binding(request, "ENVIRONMENT", "development")
+    session_secret = _binding(request, "AUTH_SESSION_SECRET")
+    if environment != "production" and not session_secret:
+        session_secret = configured_password
+    if not configured_username or not configured_password or not session_secret:
+        raise HTTPException(status_code=503, detail="Login is not configured.")
+    valid_username = hmac.compare_digest(payload.username, configured_username)
+    valid_password = hmac.compare_digest(payload.password, configured_password)
+    if not (valid_username and valid_password):
+        raise HTTPException(status_code=401, detail="Invalid username or password.")
+    token = create_credential_session(configured_username, session_secret)
+    response.set_cookie(
+        key=AUTH_COOKIE_NAME,
+        value=token,
+        max_age=AUTH_SESSION_TTL_SECONDS,
+        httponly=True,
+        secure=environment == "production",
+        samesite="lax",
+        path="/",
+    )
+    email = (
+        configured_username
+        if "@" in configured_username
+        else f"{configured_username}@local.account"
+    )
+    user = AuthUser(
+        subject=credential_subject(configured_username),
+        email=email,
+        name=configured_username,
+    )
+    return _identity_payload(request, user)
+
+
+@app.post("/api/auth/logout", status_code=204)
+async def auth_logout(
+    request: Request, response: Response
+) -> Response:
+    response.delete_cookie(
+        key=AUTH_COOKIE_NAME,
+        httponly=True,
+        secure=_binding(request, "ENVIRONMENT", "development") == "production",
+        samesite="lax",
+        path="/",
+    )
+    response.status_code = 204
+    return response
+
+
+@app.get("/api/auth/me")
+async def auth_me(request: Request, user: CurrentUser) -> dict[str, object]:
+    return _identity_payload(request, user)
 
 
 @app.get("/api/conversations")

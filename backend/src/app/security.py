@@ -11,6 +11,7 @@ import httpx
 from fastapi import HTTPException
 
 _requests: dict[str, deque[float]] = defaultdict(deque)
+_login_requests: dict[str, deque[float]] = defaultdict(deque)
 AI_SESSION_TTL_SECONDS = 60 * 60
 
 
@@ -87,6 +88,34 @@ async def check_rate_limit(
         raise HTTPException(
             status_code=429,
             detail="AI query limit reached. Try again in a few minutes.",
+        )
+    bucket.append(now)
+
+
+async def check_login_rate_limit(
+    client_ip: str,
+    binding=None,
+    limit: int = 5,
+    window: int = 900,
+) -> None:
+    if binding is not None:
+        result = await binding.limit({"key": f"login:{client_ip}"})
+        success = getattr(result, "success", None)
+        if success is None and isinstance(result, dict):
+            success = result.get("success")
+        if not success:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many login attempts. Try again later.",
+            )
+    now = time.monotonic()
+    bucket = _login_requests[client_ip]
+    while bucket and bucket[0] <= now - window:
+        bucket.popleft()
+    if len(bucket) >= limit:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many login attempts. Try again later.",
         )
     bucket.append(now)
 

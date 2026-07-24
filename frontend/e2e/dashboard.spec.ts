@@ -1,5 +1,45 @@
 import { expect, test } from "@playwright/test";
 
+test("signs in with reviewer credentials and signs out", async ({ page }) => {
+  await page.route("**/api/auth/me", async (route) => {
+    await route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ detail: "Sign in is required." }),
+    });
+  });
+  await page.route("**/api/auth/login", async (route) => {
+    expect(route.request().postDataJSON()).toEqual({
+      username: "reviewer",
+      password: "test-password",
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "credentials:test",
+        email: "reviewer@local.account",
+        name: "reviewer",
+        logout_url: null,
+      }),
+    });
+  });
+  await page.route("**/api/auth/logout", async (route) => {
+    await route.fulfill({ status: 204, body: "" });
+  });
+
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: /Your logistics data/i })).toBeVisible();
+  await page.getByLabel("Username").fill("reviewer");
+  await page.getByLabel("Password").fill("test-password");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByText("reviewer@local.account")).toBeVisible();
+  await expect(page.getByRole("heading", { name: /See where orders move/i })).toBeVisible();
+
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page.getByRole("button", { name: "Continue" })).toBeVisible();
+});
+
 test("loads the dashboard and applies an operational filter", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /See where orders move/i })).toBeVisible();

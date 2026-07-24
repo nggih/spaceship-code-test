@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import json
 import os
 import time
@@ -10,6 +12,8 @@ from typing import Any
 from fastapi import HTTPException, Request
 
 _jwks_cache: dict[str, Any] = {"expires_at": 0.0, "keys": []}
+AUTH_COOKIE_NAME = "logistics_session"
+AUTH_SESSION_TTL_SECONDS = 8 * 60 * 60
 
 
 @dataclass(frozen=True)
@@ -34,6 +38,77 @@ def _decode_segment(value: str) -> dict[str, Any]:
         return json.loads(base64.urlsafe_b64decode(padded).decode("utf-8"))
     except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise HTTPException(status_code=401, detail="Invalid authentication token.") from exc
+
+
+def _encode_bytes(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+
+
+def _decode_bytes(value: str) -> bytes:
+    return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+
+
+def credential_subject(username: str) -> str:
+    digest = hashlib.sha256(username.casefold().encode("utf-8")).hexdigest()
+    return f"credentials:{digest}"
+
+
+def create_credential_session(
+    username: str,
+    secret: str,
+    now: int | None = None,
+) -> str:
+    issued_at = int(time.time() if now is None else now)
+    payload = json.dumps(
+        {
+            "sub": credential_subject(username),
+            "username": username,
+            "iat": issued_at,
+            "exp": issued_at + AUTH_SESSION_TTL_SECONDS,
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    signature = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).digest()
+    return f"{_encode_bytes(payload)}.{_encode_bytes(signature)}"
+
+
+def verify_credential_session(
+    token: str | None,
+    secret: str | None,
+    expected_username: str | None,
+    now: int | None = None,
+) -> AuthUser | None:
+    if not token or not secret or not expected_username:
+        return None
+    try:
+        encoded_payload, encoded_signature = token.split(".", 1)
+        payload_bytes = _decode_bytes(encoded_payload)
+        provided_signature = _decode_bytes(encoded_signature)
+        expected_signature = hmac.new(
+            secret.encode("utf-8"), payload_bytes, hashlib.sha256
+        ).digest()
+        if not hmac.compare_digest(provided_signature, expected_signature):
+            return None
+        payload = json.loads(payload_bytes)
+        issued_at = int(payload["iat"])
+        expires_at = int(payload["exp"])
+        username = payload["username"]
+        subject = payload["sub"]
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    current = int(time.time() if now is None else now)
+    if (
+        not isinstance(username, str)
+        or not hmac.compare_digest(username, expected_username)
+        or subject != credential_subject(expected_username)
+        or issued_at > current + 60
+        or expires_at <= current
+        or expires_at - issued_at != AUTH_SESSION_TTL_SECONDS
+    ):
+        return None
+    email = username if "@" in username else f"{username}@local.account"
+    return AuthUser(subject=subject, email=email, name=username)
 
 
 def _validate_claims(
@@ -127,24 +202,43 @@ async def _verify_access_signature(
 
 async def require_user(request: Request) -> AuthUser:
     environment = _binding(request, "ENVIRONMENT", "development")
-    if environment != "production":
+    team_domain = (_binding(request, "ACCESS_TEAM_DOMAIN") or "").rstrip("/")
+    audience = _binding(request, "ACCESS_AUD")
+    access_token = request.headers.get("Cf-Access-Jwt-Assertion")
+    if team_domain and audience and access_token:
+        try:
+            encoded_header, encoded_payload, _ = access_token.split(".", 2)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=401, detail="Invalid authentication token."
+            ) from exc
+        header = _decode_segment(encoded_header)
+        payload = _decode_segment(encoded_payload)
+        await _verify_access_signature(access_token, header, team_domain)
+        return _validate_claims(payload, issuer=team_domain, audience=audience)
+
+    configured_username = _binding(request, "USERNAME")
+    configured_password = _binding(request, "PASSWORD")
+    credentials_configured = bool(configured_username and configured_password)
+    session_secret = _binding(request, "AUTH_SESSION_SECRET")
+    if environment != "production" and not session_secret:
+        session_secret = configured_password
+    credential_user = verify_credential_session(
+        request.cookies.get(AUTH_COOKIE_NAME),
+        session_secret,
+        configured_username if credentials_configured else None,
+    )
+    if credential_user is not None:
+        return credential_user
+
+    auth_bypass = (_binding(request, "AUTH_BYPASS", "false") or "false").lower()
+    if environment != "production" and (
+        auth_bypass == "true"
+        or not credentials_configured
+    ):
         email = request.headers.get("X-Dev-User") or _binding(
             request, "DEV_AUTH_EMAIL", "reviewer@local.test"
         )
         return AuthUser(subject=f"local:{email}", email=email or "reviewer@local.test")
 
-    team_domain = (_binding(request, "ACCESS_TEAM_DOMAIN") or "").rstrip("/")
-    audience = _binding(request, "ACCESS_AUD")
-    if not team_domain or not audience:
-        raise HTTPException(status_code=503, detail="Authentication is not configured.")
-    token = request.headers.get("Cf-Access-Jwt-Assertion")
-    if not token:
-        raise HTTPException(status_code=401, detail="Sign in is required.")
-    try:
-        encoded_header, encoded_payload, _ = token.split(".", 2)
-    except ValueError as exc:
-        raise HTTPException(status_code=401, detail="Invalid authentication token.") from exc
-    header = _decode_segment(encoded_header)
-    payload = _decode_segment(encoded_payload)
-    await _verify_access_signature(token, header, team_domain)
-    return _validate_claims(payload, issuer=team_domain, audience=audience)
+    raise HTTPException(status_code=401, detail="Sign in is required.")

@@ -13,7 +13,7 @@ PUBLIC_APP_URL = "https://logistics-intelligence-dashboard.pages.dev"
 TURNSTILE_AFTER_LOGIN = "false"
 
 [secrets]
-required = ["OPENROUTER_API_KEY"]
+required = ["OPENROUTER_API_KEY", "USERNAME", "PASSWORD", "AUTH_SESSION_SECRET"]
 
 [python_modules]
 excludes = [

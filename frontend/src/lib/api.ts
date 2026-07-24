@@ -68,6 +68,13 @@ async function request<T>(
         : Array.isArray(detail)
           ? detail.map((item) => item.msg || "Invalid request").join("; ")
           : `Request failed (${response.status})`;
+    if (
+      response.status === 401 &&
+      path !== "/api/auth/login" &&
+      path !== "/api/auth/me"
+    ) {
+      window.dispatchEvent(new Event("logistics:unauthorized"));
+    }
     throw new ApiError(message, response.status);
   }
   onResponse?.(response);
@@ -76,6 +83,15 @@ async function request<T>(
 }
 
 export const api = {
+  login: (username: string, password: string) =>
+    request<AuthUser>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    }),
+  logout: () =>
+    request<void>("/api/auth/logout", {
+      method: "POST",
+    }),
   me: () => request<AuthUser>("/api/auth/me"),
   conversations: () =>
     request<{ conversations: ConversationSummary[] }>("/api/conversations"),
